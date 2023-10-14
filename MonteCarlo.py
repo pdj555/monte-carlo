@@ -47,7 +47,7 @@ def Monte_Carlo(period=252, n_scenarios=1000, mu=mean, sigma=vol, last_price=las
 
 
 # Simulate stock prices
-sim = Monte_Carlo_example(period=periods, n_scenarios=10000, mu=mean, sigma=vol, last_price=last_price)
+sim = Monte_Carlo(period=periods, n_scenarios=10000, mu=mean, sigma=vol, last_price=last_price)
 
 # Plot the distribution of the estimated price
 plt.figure(figsize=(12,8))
