@@ -20,7 +20,7 @@ last_price = df.iloc[-1]
 periods = 252
 
 
-def Monte_Carlo_example(period=252, n_scenarios=1000, mu=mean, sigma=vol, last_price=last_price):
+def Monte_Carlo(period=252, n_scenarios=1000, mu=mean, sigma=vol, last_price=last_price):
     """
     Generate Monte Carlo simulations of stock prices.
     
