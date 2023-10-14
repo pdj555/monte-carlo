@@ -37,7 +37,7 @@ To run the simulation, execute the Python script `MonteCarlo.py`. The script wil
 
 ## Function Details
 
-The core function `Monte_Carlo_example` takes several parameters:
+The core function `Monte_Carlo` takes several parameters:
 
 - `period` (int): Number of trading days for the simulation.
 - `n_scenarios` (int): Number of simulation scenarios.
