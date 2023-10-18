@@ -22,7 +22,7 @@ Before running this code, you'll need to ensure you have the necessary Python pa
 You can install these packages using `pip`:
 
 ```bash
-pip install yfinance seaborn numpy pandas matplotlib
+pip3 install yfinance seaborn numpy pandas matplotlib
 ```
 
 ## Installation
