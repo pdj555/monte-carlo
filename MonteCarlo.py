@@ -1,61 +1,83 @@
-# Import Packages
-import yfinance as yf
-import seaborn as sns
-import numpy as np
-import pandas as pd
+"""Run Monte Carlo stock price simulations from the command line.
+
+This script is intentionally small. It simply wires together the helper
+modules that handle data retrieval, running the actual simulations and
+visualising the results. The command-line defaults mirror the old behaviour
+so it can be executed without any arguments.
+"""
+
+from __future__ import annotations
+
+import argparse
 import matplotlib.pyplot as plt
-plt.style.use('ggplot')
 
-# Stock to predict
-asset = 'AAPL'
+# Core functionality lives in these modules so they can be reused elsewhere
+from data import fetch_prices, PriceDataError
+from simulation import simulate_prices
+from viz import plot_distribution, plot_paths
 
-# Function to generate Monte Carlo simulations of stock prices
-def Monte_Carlo(period, n_scenarios, asset):
-    """
-    Generate Monte Carlo simulations of stock prices.
-    
-    Args:
-        period (int): Number of trading days.
-        n_scenarios (int): Number of simulation scenarios.
-        asset (str): Ticker symbol of the stock.
+# Use a consistent aesthetic for plots
+plt.style.use("ggplot")
 
-    Returns:
-        DataFrame: Simulated stock prices.
-    """
-    # Use data from Yahoo! Finance
-    df = yf.download(asset)['Close']
-    df_pct = df.pct_change()
 
-    mean = df_pct.mean()
-    vol = df_pct.std()
-    last_price = df.iloc[-1]
-    
-    # Inputs
-    dt = 1
-    n_steps = int(period)
-    xi = np.random.normal(size=(n_steps, n_scenarios))
+def parse_args() -> argparse.Namespace:
+    """Return CLI options controlling the simulation."""
+    # The parser mirrors options previously set as module constants
+    parser = argparse.ArgumentParser(
+        description="Run a Monte Carlo stock price simulation."
+    )
+    parser.add_argument(
+        "--ticker",
+        default="AAPL",
+        help="Stock ticker symbol to simulate (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=365,
+        help="Number of future trading days (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--scenarios",
+        type=int,
+        default=10000,
+        help="Number of simulated price paths (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--dt",
+        type=float,
+        default=1.0,
+        help="Time increment for each step (default: %(default)s)",
+    )
+    return parser.parse_args()
 
-    rets = mean * dt + vol * np.sqrt(dt) * xi
-    rets = pd.DataFrame(rets)
 
-    prices = last_price * (1 + rets).cumprod()
-    return prices
+def main() -> None:
+    """Fetch data, run simulations, and plot the results."""
+    args = parse_args()
 
-# Define period and number of scenarios
-periods = 365
-n_scenarios = 10000
+    # 1. Pull historical data then derive daily returns
+    try:
+        prices = fetch_prices(args.ticker)
+    except PriceDataError as exc:
+        print(f"Error fetching prices: {exc}")
+        return
 
-# Simulate stock prices
-sim = Monte_Carlo(periods, n_scenarios, asset)
+    returns = prices.pct_change().dropna()
 
-# Plot the distribution of the estimated price
-plt.figure(figsize=(12,8))
-ax1 = sns.histplot(data=sim.iloc[-1, :], bins=30, kde=True, color='skyblue', stat='density')
-ax1.set(xlabel='Price', ylabel='Density', title=f'Distribution of {asset} Estimated Price in {periods} Days')
-plt.show()
+    # 2. Produce a matrix of simulated future prices
+    sims = simulate_prices(
+        returns, days=args.days, scenarios=args.scenarios, dt=args.dt
+    )
 
-# Plot the paths of the simulations
-plt.figure(figsize=(12,8))
-ax2 = sim.plot(legend=False, title=f'Simulated Paths of {asset}')
-ax2.set(xlabel='Days', ylabel='Price')
-plt.show()
+    # 3. Display a histogram of where each scenario ends up
+    plot_distribution(sims, ticker=args.ticker)
+    plt.show()
+
+    # 4. Visualise a subset of simulated paths over time
+    plot_paths(sims, ticker=args.ticker)
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
