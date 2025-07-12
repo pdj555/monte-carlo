@@ -6,8 +6,6 @@ This Python script uses Monte Carlo simulations to estimate the future price of 
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Function Details](#function-details)
-- [Example](#example)
 - [License](#license)
 
 ## Prerequisites
@@ -25,6 +23,18 @@ You can install these packages using `pip`:
 pip3 install yfinance seaborn numpy pandas matplotlib
 ```
 
+If you encounter an error such as ``ModuleNotFoundError: No module named
+\'matplotlib\'`` when running the script, make sure these packages are
+installed in your current Python environment.
+
+If you are running in an environment without a graphical display (for example
+on a CI server), set ``MPLBACKEND=Agg`` when invoking the script so
+``matplotlib`` does not attempt to open GUI windows.
+
+When internet access is restricted, ``data.py`` will fall back to CSV files in
+``sample_data/``. You can add your own ``<TICKER>.csv`` files with ``Date`` and
+``Close`` columns to run simulations offline.
+
 ## Installation
 
 1. Clone or download the repository to your local machine.
@@ -33,40 +43,19 @@ pip3 install yfinance seaborn numpy pandas matplotlib
 
 ## Usage
 
-To run the simulation, execute the Python script `MonteCarlo.py`. The script will download historical stock price data for the specified asset from Yahoo! Finance and perform the Monte Carlo simulation.
+Run the simulation from the command line using `MonteCarlo.py`. By default the
+script fetches historical prices for ``AAPL`` and simulates 10,000 possible
+future paths over one year (365 trading days).
 
-## Function Details
-
-The core function `Monte_Carlo` takes several parameters:
-
-- `period` (int): Number of trading days for the simulation.
-- `n_scenarios` (int): Number of simulation scenarios.
-- `mu` (float): Mean daily return.
-- `sigma` (float): Daily volatility.
-- `last_price` (float): Last known price.
-
-It returns a DataFrame containing simulated stock prices.
-
-## Example
-
-```python
-# Simulate stock prices
-sim = Monte_Carlo_example(period=252, n_scenarios=10000, mu=mean, sigma=vol, last_price=last_price)
-
-# Plot the distribution of the estimated price
-plt.figure(figsize=(12,8))
-ax1 = sns.histplot(data=sim.iloc[-1, :], bins=30, kde=True, color='skyblue', stat='density')
-ax1.set(xlabel='Price', ylabel='Density', title=f'Distribution of {asset} Estimated Price in 252 Days')
-plt.show()
-
-# Plot the paths of the simulations
-plt.figure(figsize=(12,8))
-ax2 = sim.plot(legend=False, title=f'Simulated Paths of {asset}')
-ax2.set(xlabel='Days', ylabel='Price')
-plt.show()
+```bash
+python MonteCarlo.py --ticker AAPL --days 252 --scenarios 1000
 ```
 
-This will generate a distribution plot of the estimated price and a plot of the simulated paths for the specified asset.
+The optional arguments allow different tickers, forecast horizons, numbers of
+scenarios and the ``dt`` step size. See ``--help`` for details.
+
+The script produces a histogram of final prices and a plot of several simulated
+paths using ``matplotlib`` and ``seaborn``.
 
 ## License
 
