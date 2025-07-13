@@ -13,17 +13,27 @@ Example
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 import yfinance as yf
+
+# Default directory containing fallback CSV data
+_FALLBACK_DIR = Path(__file__).resolve().parent / "sample_data"
 
 
 class PriceDataError(Exception):
     """Raised when price data cannot be retrieved."""
 
 
-def fetch_prices(ticker: str, start: Optional[str] = None, end: Optional[str] = None) -> pd.Series:
+def fetch_prices(
+    ticker: str,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    *,
+    offline_path: Optional[Path] = None,
+) -> pd.Series:
     """Download daily closing prices for ``ticker``.
 
     Parameters
@@ -34,6 +44,13 @@ def fetch_prices(ticker: str, start: Optional[str] = None, end: Optional[str] = 
         Start date in ``YYYY-MM-DD`` format.
     end : str, optional
         End date in ``YYYY-MM-DD`` format.
+
+    Parameters
+    ----------
+    offline_path : pathlib.Path, optional
+        Local CSV file to use when network requests fail. If not provided,
+        ``data.py`` will look for ``sample_data/{ticker}.csv`` relative to the
+        module location.
 
     Returns
     -------
@@ -61,6 +78,13 @@ def fetch_prices(ticker: str, start: Optional[str] = None, end: Optional[str] = 
             last_error = exc
             attempts += 1
             time.sleep(1)
+
+    # If online retrieval fails, attempt to load from a local CSV
+    fallback = offline_path or _FALLBACK_DIR / f"{ticker}.csv"
+    if fallback.exists():
+        series = pd.read_csv(fallback, index_col=0, parse_dates=True)["Close"]
+        if not series.empty:
+            return series
 
     message = str(last_error) if last_error else "Unknown error"
     raise PriceDataError(f"Failed to fetch price data for '{ticker}': {message}")
