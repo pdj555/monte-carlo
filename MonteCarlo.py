@@ -64,10 +64,11 @@ def main() -> None:
         return
 
     returns = prices.pct_change().dropna()
+    current_price = prices.iloc[-1]
 
     # 2. Produce a matrix of simulated future prices
     sims = simulate_prices(
-        returns, days=args.days, scenarios=args.scenarios, dt=args.dt
+        returns, days=args.days, scenarios=args.scenarios, dt=args.dt, current_price=current_price
     )
 
     # 3. Display a histogram of where each scenario ends up
