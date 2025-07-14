@@ -27,14 +27,32 @@ def simulate_prices(
         Time increment for each step. ``1.0`` corresponds to daily steps.
     seed : int, optional
         Random seed for reproducible simulations.
-    current_price : float, optional
+    current_price : float or pd.Series, optional
         Current stock price to use as starting point. If None, returns
-        cumulative returns starting from 1.0.
+        cumulative returns starting from 1.0 (normalized). If provided,
+        the function returns absolute price paths starting from this value.
+        Can be a scalar float or a pandas Series (in which case the first
+        value will be used).
 
     Returns
     -------
     pandas.DataFrame
         Simulated future prices with shape ``(days, scenarios)``.
+        If current_price is None, returns cumulative returns starting from 1.0.
+        If current_price is provided, returns absolute price paths starting
+        from the given price.
+        
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> returns = pd.Series(np.random.randn(100) * 0.02)  # 2% daily volatility
+    >>> 
+    >>> # Simulate normalized returns (starting from 1.0)
+    >>> sims = simulate_prices(returns, days=30, scenarios=1000)
+    >>> 
+    >>> # Simulate absolute prices (starting from current price)
+    >>> sims = simulate_prices(returns, days=30, scenarios=1000, current_price=150.0)
     """
     if days <= 0 or scenarios <= 0:
         raise ValueError("days and scenarios must be positive integers")
@@ -42,15 +60,19 @@ def simulate_prices(
     rng = np.random.default_rng(seed)
 
     # Calculate drift and volatility from historical returns
-    drift = returns.mean()
-    volatility = returns.std()
-
+    drift_val = returns.mean()
+    volatility_val = returns.std()
+    
+    # Convert to float, handling both scalar and Series cases
+    drift = float(drift_val.iloc[0] if hasattr(drift_val, 'iloc') else drift_val)
+    volatility = float(volatility_val.iloc[0] if hasattr(volatility_val, 'iloc') else volatility_val)
+    
     # Random shocks for each time step and scenario
     shocks = rng.standard_normal(size=(days, scenarios))
 
     # Daily returns based on drift and volatility
-    # Extract scalar values to avoid pandas Series index alignment issues
-    rets = drift.iloc[0] * dt + volatility.iloc[0] * np.sqrt(dt) * shocks
+    # drift and volatility are scalar values, not Series
+    rets = drift * dt + volatility * np.sqrt(dt) * shocks
 
     # Cumulative product to get compounded returns
     cumulative = np.cumprod(1 + rets, axis=0)
