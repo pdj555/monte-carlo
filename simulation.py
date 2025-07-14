@@ -45,7 +45,8 @@ def simulate_prices(
     shocks = rng.standard_normal(size=(days, scenarios))
 
     # Daily returns based on drift and volatility
-    rets = drift * dt + volatility * np.sqrt(dt) * shocks
+    # Extract scalar values to avoid pandas Series index alignment issues
+    rets = drift.iloc[0] * dt + volatility.iloc[0] * np.sqrt(dt) * shocks
 
     # Cumulative product to get compounded returns
     cumulative = np.cumprod(1 + rets, axis=0)
