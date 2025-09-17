@@ -1,63 +1,85 @@
 # Monte Carlo Stock Price Simulation
 
-This Python script uses Monte Carlo simulations to estimate the future price of a given stock (in this example, AAPL). It utilizes historical stock price data obtained from Yahoo! Finance.
+This project provides reusable building blocks for running Monte Carlo stock price simulations. Historical data is retrieved from Yahoo! Finance (via `yfinance`) and fed into vectorised simulation routines and plotting helpers.
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
-- [Usage](#usage)
+- [Quick Start](#quick-start)
+- [Command-Line Interface](#command-line-interface)
+- [Offline Data](#offline-data)
+- [Testing](#testing)
 - [License](#license)
 
 ## Prerequisites
 
-Before running this code, you'll need to ensure you have the necessary Python packages installed. These include:
-- yfinance
-- seaborn
-- numpy
-- pandas
-- matplotlib
-
-You can install these packages using `pip`:
+Python 3.9+ is recommended. Install the required packages using the bundled `requirements.txt`:
 
 ```bash
-pip3 install yfinance seaborn numpy pandas matplotlib
+pip install -r requirements.txt
 ```
 
-If you encounter an error such as ``ModuleNotFoundError: No module named
-\'matplotlib\'`` when running the script, make sure these packages are
-installed in your current Python environment.
+The key runtime dependencies are:
 
-If you are running in an environment without a graphical display (for example
-on a CI server), set ``MPLBACKEND=Agg`` when invoking the script so
-``matplotlib`` does not attempt to open GUI windows.
-
-When internet access is restricted, ``data.py`` will fall back to CSV files in
-``sample_data/``. You can add your own ``<TICKER>.csv`` files with ``Date`` and
-``Close`` columns to run simulations offline.
+- `yfinance` for historical prices.
+- `pandas` and `numpy` for data wrangling and vectorised simulations.
+- `matplotlib` and `seaborn` for visualisations.
+- `pytest` for the automated test-suite.
 
 ## Installation
 
 1. Clone or download the repository to your local machine.
+2. Install the dependencies listed above.
 
-2. Make sure you have the required packages installed (see [Prerequisites](#prerequisites)).
+## Quick Start
 
-## Usage
-
-Run the simulation from the command line using `MonteCarlo.py`. By default the
-script fetches historical prices for ``AAPL`` and simulates 10,000 possible
-future paths over one year (365 trading days).
+Run the original single-ticker workflow:
 
 ```bash
 python MonteCarlo.py --ticker AAPL --days 252 --scenarios 1000
 ```
 
-The optional arguments allow different tickers, forecast horizons, numbers of
-scenarios and the ``dt`` step size. See ``--help`` for details.
+The script fetches prices, generates simulations, prints key statistics for the final price distribution and opens histogram/path plots.
 
-The script produces a histogram of final prices and a plot of several simulated
-paths using ``matplotlib`` and ``seaborn``.
+## Command-Line Interface
+
+`cli.py` offers an expanded workflow capable of processing multiple tickers, choosing between the historical bootstrap model and geometric Brownian motion, and saving artefacts to disk.
+
+```bash
+python cli.py --tickers AAPL,MSFT --days 252 --scenarios 5000 --model gbm \
+  --output ./results --seed 42
+```
+
+Notable options:
+
+| Flag | Description |
+| ---- | ----------- |
+| `--tickers` | Comma separated list of tickers to simulate. |
+| `--model` | `historical` (default) or `gbm` for geometric Brownian motion. |
+| `--seed` | Fix the random seed to obtain reproducible paths. |
+| `--output` | Directory where distribution and path plots are saved. |
+| `--no-show` | Skip displaying plots (useful on servers/CI). |
+| `--offline-path` | Directory or CSV file used when offline data is required. |
+| `--offline-only` | Never hit the network—expect local CSV data. |
+
+Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices.
+
+## Offline Data
+
+When internet access is restricted, pass `--offline-only` so `cli.py` and the underlying `fetch_prices` helper use CSV data exclusively. CSV files should contain `Date` and `Close` columns. By default the repository looks for `sample_data/<TICKER>.csv` but you can point to your own directory via `--offline-path /path/to/csvs`.
+
+To avoid GUI pop-ups in headless environments set `MPLBACKEND=Agg` before running the commands or pass `--no-show` to the CLI.
+
+## Testing
+
+Execute the automated tests with `pytest`:
+
+```bash
+pytest
+```
+
+The tests exercise the simulation routines, summary statistics and CLI entry points to guard against regressions.
 
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
-
