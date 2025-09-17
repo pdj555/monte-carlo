@@ -1,8 +1,23 @@
+"""Monte Carlo simulation helpers."""
+
 from __future__ import annotations
+
+from typing import Optional
 
 import numpy as np
 import pandas as pd
-from typing import Optional
+
+__all__ = ["simulate_prices", "simulate_gbm"]
+
+
+def _as_float(value: float | pd.Series) -> float:
+    """Return a scalar float from ``value`` which may be a pandas object."""
+
+    if hasattr(value, "iloc"):
+        scalar = value.iloc[-1]
+    else:
+        scalar = value
+    return float(scalar)
 
 
 def simulate_prices(
@@ -11,9 +26,13 @@ def simulate_prices(
     scenarios: int,
     dt: float = 1.0,
     seed: Optional[int] = None,
-    current_price: Optional[float] = None,
+    current_price: Optional[float | pd.Series] = None,
 ) -> pd.DataFrame:
-    """Vectorized Monte Carlo simulation of future prices.
+    """Vectorized Monte Carlo simulation of future prices using historical data.
+
+    The function estimates drift and volatility directly from the supplied
+    return series and applies them to a geometric random walk. Providing
+    ``current_price`` converts the normalised paths into absolute price levels.
 
     Parameters
     ----------
@@ -27,63 +46,107 @@ def simulate_prices(
         Time increment for each step. ``1.0`` corresponds to daily steps.
     seed : int, optional
         Random seed for reproducible simulations.
-    current_price : float or pd.Series, optional
-        Current stock price to use as starting point. If None, returns
-        cumulative returns starting from 1.0 (normalized). If provided,
-        the function returns absolute price paths starting from this value.
-        Can be a scalar float or a pandas Series (in which case the first
-        value will be used).
+    current_price : float or pandas.Series, optional
+        Starting price for the simulated paths. If omitted the output is
+        normalised to start at ``1.0``.
 
     Returns
     -------
     pandas.DataFrame
         Simulated future prices with shape ``(days, scenarios)``.
-        If current_price is None, returns cumulative returns starting from 1.0.
-        If current_price is provided, returns absolute price paths starting
-        from the given price.
-        
+
     Examples
     --------
     >>> import pandas as pd
     >>> import numpy as np
-    >>> returns = pd.Series(np.random.randn(100) * 0.02)  # 2% daily volatility
-    >>> 
-    >>> # Simulate normalized returns (starting from 1.0)
-    >>> sims = simulate_prices(returns, days=30, scenarios=1000)
-    >>> 
-    >>> # Simulate absolute prices (starting from current price)
-    >>> sims = simulate_prices(returns, days=30, scenarios=1000, current_price=150.0)
+    >>> returns = pd.Series(np.random.randn(100) * 0.02)
+    >>> simulate_prices(returns, days=30, scenarios=500).head()
     """
+
     if days <= 0 or scenarios <= 0:
         raise ValueError("days and scenarios must be positive integers")
+    if returns.empty:
+        raise ValueError("returns must contain at least one observation")
 
     rng = np.random.default_rng(seed)
 
-    # Calculate drift and volatility from historical returns
-    drift_val = returns.mean()
-    volatility_val = returns.std()
-    
-    # Convert to float, handling both scalar and Series cases
-    drift = float(drift_val.iloc[0] if hasattr(drift_val, 'iloc') else drift_val)
-    volatility = float(volatility_val.iloc[0] if hasattr(volatility_val, 'iloc') else volatility_val)
-    
-    # Random shocks for each time step and scenario
+    drift = float(returns.mean())
+    volatility = float(returns.std())
+
     shocks = rng.standard_normal(size=(days, scenarios))
-
-    # Daily returns based on drift and volatility
-    # drift and volatility are scalar values, not Series
     rets = drift * dt + volatility * np.sqrt(dt) * shocks
-
-    # Cumulative product to get compounded returns
     cumulative = np.cumprod(1 + rets, axis=0)
 
-    # Convert to actual stock prices if current_price is provided
     if current_price is not None:
-        # Extract scalar value if current_price is a pandas Series
-        if hasattr(current_price, 'iloc'):
-            price_scalar = current_price.iloc[0]
-        else:
-            price_scalar = current_price
+        price_scalar = _as_float(current_price)
+        if price_scalar <= 0:
+            raise ValueError("current_price must be positive")
         cumulative = cumulative * price_scalar
 
-    return pd.DataFrame(cumulative)
+    index = pd.RangeIndex(start=1, stop=days + 1, name="day")
+    columns = pd.RangeIndex(start=1, stop=scenarios + 1, name="scenario")
+    return pd.DataFrame(cumulative, index=index, columns=columns)
+
+
+def simulate_gbm(
+    *,
+    current_price: float | pd.Series,
+    mu: float,
+    sigma: float,
+    days: int,
+    scenarios: int,
+    dt: float = 1.0,
+    seed: Optional[int] = None,
+) -> pd.DataFrame:
+    """Simulate price paths using the geometric Brownian motion model.
+
+    Parameters
+    ----------
+    current_price : float or pandas.Series
+        Starting price for the simulation. If a Series is passed the final
+        value is used.
+    mu : float
+        Expected return per time step.
+    sigma : float
+        Volatility per time step.
+    days : int
+        Number of future days to simulate.
+    scenarios : int
+        Number of simulated price paths.
+    dt : float, optional
+        Time increment for each step. ``1.0`` corresponds to daily steps.
+    seed : int, optional
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Simulated price paths following the GBM dynamics.
+
+    Notes
+    -----
+    The simulated log returns follow ``mu - 0.5 * sigma**2`` drift with
+    ``sigma`` volatility. This mirrors the standard GBM formulation used in
+    option pricing and many risk models.
+    """
+
+    if days <= 0 or scenarios <= 0:
+        raise ValueError("days and scenarios must be positive integers")
+    if sigma < 0:
+        raise ValueError("sigma must be non-negative")
+
+    start_price = _as_float(current_price)
+    if start_price <= 0:
+        raise ValueError("current_price must be positive")
+
+    rng = np.random.default_rng(seed)
+    shocks = rng.standard_normal(size=(days, scenarios))
+
+    drift = (mu - 0.5 * sigma**2) * dt
+    diffusion = sigma * np.sqrt(dt) * shocks
+    log_returns = drift + diffusion
+    cumulative = np.exp(np.cumsum(log_returns, axis=0)) * start_price
+
+    index = pd.RangeIndex(start=1, stop=days + 1, name="day")
+    columns = pd.RangeIndex(start=1, stop=scenarios + 1, name="scenario")
+    return pd.DataFrame(cumulative, index=index, columns=columns)

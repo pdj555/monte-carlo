@@ -12,6 +12,7 @@ import argparse
 import matplotlib.pyplot as plt
 
 # Core functionality lives in these modules so they can be reused elsewhere
+from analysis import summarize_final_prices
 from data import fetch_prices, PriceDataError
 from simulation import simulate_prices
 from viz import plot_distribution, plot_paths
@@ -70,6 +71,10 @@ def main() -> None:
     sims = simulate_prices(
         returns, days=args.days, scenarios=args.scenarios, dt=args.dt, current_price=current_price
     )
+
+    summary = summarize_final_prices(sims, current_price=current_price)
+    print("Simulation summary (final prices):")
+    print(summary.to_string(float_format=lambda value: f"{value:0.2f}"))
 
     # 3. Display a histogram of where each scenario ends up
     plot_distribution(sims, ticker=args.ticker)
