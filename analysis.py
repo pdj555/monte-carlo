@@ -147,7 +147,7 @@ def calculate_sortino_ratio(
     Returns
     -------
     float
-        Sortino ratio averaged across all scenarios.
+        Sortino ratio calculated from all simulated paths.
 
     Examples
     --------
@@ -164,13 +164,29 @@ def calculate_sortino_ratio(
     # Calculate returns for each scenario
     returns = df.pct_change().dropna()
     
-    # Average returns across scenarios
-    mean_return = float(returns.mean().mean())
+    # Flatten all returns across all scenarios
+    all_returns = returns.values.flatten()
     
-    # Calculate downside deviation (only negative returns)
-    downside_returns = returns.copy()
-    downside_returns[downside_returns > 0] = 0
-    downside_std = float(downside_returns.std().mean())
+    # Calculate mean return
+    mean_return = float(np.mean(all_returns))
+    
+    # Convert target return to per-period basis
+    target_return_per_period = target_return / periods_per_year
+    
+    # Calculate downside deviation (returns below target)
+    downside_returns = all_returns - target_return_per_period
+    downside_returns = downside_returns[downside_returns < 0]
+    
+    if len(downside_returns) == 0:
+        # No downside risk - if mean return exceeds target, return very large positive value
+        # otherwise return 0
+        if mean_return > target_return_per_period:
+            # Use a very small downside std to avoid division by zero
+            downside_std = 1e-10
+        else:
+            return 0.0
+    else:
+        downside_std = float(np.sqrt(np.mean(downside_returns**2)))
     
     if downside_std == 0:
         return 0.0
