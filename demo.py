@@ -24,9 +24,6 @@ from data import fetch_prices, PriceDataError
 from simulation import simulate_prices, simulate_gbm
 from viz import plot_distribution, plot_paths
 
-# Use consistent plotting style
-plt.style.use("ggplot")
-
 
 def run_demo(ticker: str = "AAPL", offline: bool = False) -> None:
     """Run a comprehensive demo of the Monte Carlo simulation features.
@@ -154,6 +151,9 @@ def run_demo(ticker: str = "AAPL", offline: bool = False) -> None:
 
     # Step 7: Generate Visualizations
     print("Step 7: Generating visualizations...")
+    
+    # Use consistent plotting style for demo
+    plt.style.use("ggplot")
     
     # Create a figure with 4 subplots
     fig = plt.figure(figsize=(16, 12))

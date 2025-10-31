@@ -21,7 +21,6 @@ setup(
     name="monte-carlo-stock-sim",
     version="1.0.0",
     author="Monte Carlo Stock Simulation Contributors",
-    author_email="",
     description="Monte Carlo stock price simulation with multiple models and advanced analytics",
     long_description=long_description,
     long_description_content_type="text/markdown",
