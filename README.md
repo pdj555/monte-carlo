@@ -1,5 +1,9 @@
 # Monte Carlo Stock Price Simulation
 
+[![CI](https://github.com/pdj555/monte-carlo/actions/workflows/ci.yml/badge.svg)](https://github.com/pdj555/monte-carlo/actions/workflows/ci.yml)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 This project provides reusable building blocks for running Monte Carlo stock price simulations. Historical data is retrieved from Yahoo! Finance (via `yfinance`) and fed into vectorised simulation routines and plotting helpers.
 
 ## Table of Contents
@@ -28,8 +32,22 @@ The key runtime dependencies are:
 
 ## Installation
 
+### From PyPI (Recommended)
+
+```bash
+pip install monte-carlo-stock-sim
+```
+
+### From Source
+
 1. Clone or download the repository to your local machine.
 2. Install the dependencies listed above.
+
+```bash
+git clone https://github.com/pdj555/monte-carlo.git
+cd monte-carlo
+pip install -r requirements.txt
+```
 
 ## Quick Start
 
@@ -63,6 +81,31 @@ Notable options:
 | `--offline-only` | Never hit the network—expect local CSV data. |
 
 Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices.
+
+## Advanced Risk Analytics
+
+The `analysis` module provides comprehensive risk metrics:
+
+```python
+from analysis import calculate_risk_metrics
+from simulation import simulate_prices
+import pandas as pd
+
+# Run simulation
+returns = pd.Series([0.01, -0.02, 0.03, 0.04])
+sims = simulate_prices(returns, days=252, scenarios=1000, current_price=100, seed=42)
+
+# Calculate advanced risk metrics
+metrics = calculate_risk_metrics(sims, current_price=100, risk_free_rate=0.02)
+print(metrics)
+```
+
+Available metrics include:
+- **Sharpe Ratio**: Risk-adjusted return measure
+- **Sortino Ratio**: Downside risk-adjusted return
+- **Maximum Drawdown**: Largest peak-to-trough decline
+- **Value at Risk (VaR)**: Potential loss at 90%, 95%, and 99% confidence levels
+- **Conditional VaR (CVaR)**: Expected loss beyond VaR threshold
 
 ## Offline Data
 
