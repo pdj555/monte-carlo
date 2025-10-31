@@ -48,7 +48,9 @@ jobs:
     
     - name: Type check with mypy
       run: |
-        mypy --install-types --non-interactive --ignore-missing-imports *.py || true
+        # Type checking - currently informational only due to missing type stubs
+        mypy --install-types --non-interactive --ignore-missing-imports *.py || echo "Type checking completed with warnings"
+      continue-on-error: true
     
     - name: Test with pytest
       run: |
@@ -80,8 +82,12 @@ jobs:
     
     - name: Check for security vulnerabilities in dependencies
       run: |
-        safety check --json || true
+        # Check dependencies - informational only as some warnings may be unavoidable
+        safety check --json || echo "Safety check completed with warnings"
+      continue-on-error: true
     
     - name: Run bandit security linter
       run: |
-        bandit -r . -f json -o bandit-report.json || true
+        # Security linting - informational only to identify potential issues
+        bandit -r . -f json -o bandit-report.json || echo "Bandit scan completed with warnings"
+      continue-on-error: true
