@@ -61,8 +61,9 @@ def test_calculate_sortino_ratio():
     sortino = calculate_sortino_ratio(df, target_return=0.0)
 
     assert isinstance(sortino, float)
-    # Should be a reasonable value
-    assert -10 < sortino < 10
+    # Sortino can be very large for smooth upward trends with minimal downside
+    assert not np.isnan(sortino)
+    assert sortino > 0  # Should be positive for upward trending data
 
 
 def test_calculate_max_drawdown():
