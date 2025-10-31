@@ -126,3 +126,20 @@ The tests exercise the simulation routines, summary statistics and CLI entry poi
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Documentation
+
+- [Quick Reference Guide](docs/quick_reference.md) - API reference and examples
+- [Strategic Plan](docs/strategic_plan.md) - Roadmap and future improvements
+- [Constitution](docs/constitution.md) - Project principles and guidelines
+
+## Contributing
+
+Contributions are welcome! Please see our [Constitution](docs/constitution.md) for guidelines.
+
+## Demo
+
+Try out the comprehensive demo:
+```bash
+python demo.py --ticker AAPL
+```
