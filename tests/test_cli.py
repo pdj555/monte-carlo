@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+import numpy as np
+import pandas as pd
 import matplotlib
+import pytest
 
 matplotlib.use("Agg")
 
-import numpy as np
-import pandas as pd
-
-from cli import parse_args, run
+from cli import main, parse_args, run  # noqa: E402
 
 
 def _write_sample_csv(directory: str, ticker: str, trend: float) -> None:
@@ -54,3 +54,71 @@ def test_cli_runs_multi_ticker(tmp_path):
     assert (output_dir / "AAPL_distribution.png").exists()
     assert (output_dir / "MSFT_paths.png").exists()
     assert set(combined.columns.get_level_values(0)) == {"AAPL", "MSFT"}
+
+
+def test_cli_main_respects_strict_mode(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
+
+    output_dir = tmp_path / "out"
+
+    base_args = [
+        "--tickers",
+        "AAPL,MSFT",
+        "--days",
+        "20",
+        "--scenarios",
+        "25",
+        "--seed",
+        "123",
+        "--no-show",
+        "--no-plots",
+        "--output",
+        str(output_dir),
+        "--offline-path",
+        str(data_dir),
+        "--offline-only",
+    ]
+
+    assert main(base_args) == 0
+    assert main([*base_args, "--strict"]) == 1
+
+
+def test_cli_rejects_negative_seed():
+    with pytest.raises(SystemExit):
+        parse_args(["--seed", "-1"])
+
+
+def test_cli_no_plots_skips_plot_files(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
+
+    output_dir = tmp_path / "out"
+
+    args = parse_args(
+        [
+            "--tickers",
+            "AAPL",
+            "--days",
+            "10",
+            "--scenarios",
+            "25",
+            "--seed",
+            "123",
+            "--no-show",
+            "--no-plots",
+            "--output",
+            str(output_dir),
+            "--offline-path",
+            str(data_dir),
+            "--offline-only",
+        ]
+    )
+
+    result = run(args)
+
+    assert not result["summaries"].empty
+    assert (output_dir / "AAPL_distribution.png").exists() is False
+    assert (output_dir / "AAPL_paths.png").exists() is False

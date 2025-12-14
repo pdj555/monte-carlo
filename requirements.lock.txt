@@ -1,0 +1,7 @@
+yfinance==0.2.40
+seaborn==0.13.2
+numpy==1.26.4
+pandas==2.2.2
+matplotlib==3.8.2
+pytest==8.2.2
+flake8==7.0.0

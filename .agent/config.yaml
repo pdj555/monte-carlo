@@ -1,0 +1,24 @@
+# Codex Agent Configuration
+# Enables autonomous agent operation for extended periods
+
+duration_seconds: 86400 # 24 hours
+working_directory: "."
+
+setup_commands:
+  - "uv pip install -r requirements.txt"
+  - "export MPLBACKEND=Agg"
+
+execution:
+  python_version: "3.9+"
+  environment_variables:
+    MPLBACKEND: "Agg"
+
+allowed_operations:
+  - read
+  - write
+  - execute_commands
+
+network_access: true # Required for yfinance data fetching
+
+auto_commit: false # Agent should not auto-commit changes
+

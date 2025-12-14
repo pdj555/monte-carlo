@@ -24,8 +24,7 @@ def summarize_final_prices(
         each scenario.
     current_price : float, optional
         Observed current price. When provided the summary includes expected
-        return, probability of finishing above the current price and the 95%
-        value at risk.
+        return, win/loss probabilities and downside risk metrics (VaR/CVaR).
     quantiles : sequence of float, optional
         Additional quantiles to report. Values must be between ``0`` and ``1``.
 
@@ -57,11 +56,27 @@ def summarize_final_prices(
     if current_price is not None:
         if current_price <= 0:
             raise ValueError("current_price must be positive when provided")
+        current_price = float(current_price)
         summary["expected_return"] = float(final_prices.mean() / current_price - 1)
         summary["prob_above_current"] = float((final_prices > current_price).mean())
-        summary["value_at_risk_95"] = float(
-            current_price - final_prices.quantile(0.05)
-        )
+        summary["prob_below_current"] = float((final_prices < current_price).mean())
+
+        q05 = float(final_prices.quantile(0.05))
+        q01 = float(final_prices.quantile(0.01))
+
+        var_95 = max(0.0, current_price - q05)
+        var_99 = max(0.0, current_price - q01)
+
+        tail_95 = final_prices[final_prices <= q05]
+        tail_99 = final_prices[final_prices <= q01]
+
+        es_95 = current_price - float(tail_95.mean()) if not tail_95.empty else 0.0
+        es_99 = current_price - float(tail_99.mean()) if not tail_99.empty else 0.0
+
+        summary["value_at_risk_95"] = float(max(0.0, var_95))
+        summary["expected_shortfall_95"] = float(max(0.0, es_95))
+        summary["value_at_risk_99"] = float(max(0.0, var_99))
+        summary["expected_shortfall_99"] = float(max(0.0, es_99))
 
     return pd.Series(summary)
 
