@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
-from simulation import simulate_gbm, simulate_prices
+from simulation import estimate_gbm_parameters, simulate_gbm, simulate_prices
 
 
 def test_simulate_prices_shape_and_seed():
@@ -48,3 +49,27 @@ def test_simulate_gbm_reproducible():
 
     assert paths_a.equals(paths_b)
     assert paths_a.shape == (20, 10)
+
+
+def test_estimate_gbm_parameters_produces_valid_inputs():
+    returns = pd.Series([0.01, -0.005, 0.02, 0.0, 0.015])
+    mu, sigma = estimate_gbm_parameters(returns)
+
+    assert np.isfinite(mu)
+    assert sigma >= 0.0
+
+    paths = simulate_gbm(
+        current_price=100.0,
+        mu=mu,
+        sigma=sigma,
+        days=5,
+        scenarios=3,
+        seed=123,
+    )
+    assert paths.shape == (5, 3)
+
+
+def test_simulate_prices_rejects_invalid_dt():
+    returns = pd.Series([0.01, -0.02, 0.015])
+    with pytest.raises(ValueError):
+        simulate_prices(returns, days=10, scenarios=5, dt=0.0)

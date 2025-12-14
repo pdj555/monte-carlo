@@ -13,9 +13,21 @@ def test_summarize_final_prices_reports_key_metrics():
 
     summary = summarize_final_prices(df, current_price=100.0, quantiles=(0.1, 0.9))
 
-    assert {"mean", "median", "std", "expected_return", "value_at_risk_95"} <= set(summary.index)
-    assert summary["prob_above_current"] > 0.0
+    assert {
+        "mean",
+        "median",
+        "std",
+        "expected_return",
+        "value_at_risk_95",
+        "expected_shortfall_95",
+        "value_at_risk_99",
+        "expected_shortfall_99",
+    } <= set(summary.index)
+    assert 0.0 <= summary["prob_above_current"] <= 1.0
+    assert 0.0 <= summary["prob_below_current"] <= 1.0
     assert summary["q10"] <= summary["q90"]
+    assert summary["value_at_risk_99"] >= summary["value_at_risk_95"]
+    assert summary["expected_shortfall_95"] >= summary["value_at_risk_95"]
 
 
 def test_summarize_final_prices_requires_data():

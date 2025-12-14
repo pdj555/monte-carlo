@@ -1,6 +1,10 @@
-yfinance
-seaborn
-numpy
-pandas
-matplotlib
-pytest
+# Primary dependencies (runtime)
+yfinance>=0.2
+seaborn>=0.13
+numpy>=1.26
+pandas>=2.2
+matplotlib>=3.8
+
+# Developer / CI dependencies
+pytest>=8.2
+flake8>=7.0

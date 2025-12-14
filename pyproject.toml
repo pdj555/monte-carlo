@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "monte-carlo-sim"
+version = "0.1.0"
+description = "Monte Carlo stock price simulations (CLI + reusable modules)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Preston Jones" }]
+dependencies = [
+  "matplotlib",
+  "numpy",
+  "pandas",
+  "seaborn",
+  "yfinance",
+]
+
+[project.optional-dependencies]
+dev = ["flake8", "pytest"]
+
+[project.scripts]
+monte-carlo = "cli:main"
+
+[tool.setuptools]
+py-modules = ["analysis", "ai", "cli", "data", "simulation", "viz"]

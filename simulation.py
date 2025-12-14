@@ -7,7 +7,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-__all__ = ["simulate_prices", "simulate_gbm"]
+__all__ = ["estimate_gbm_parameters", "simulate_prices", "simulate_gbm"]
 
 
 def _as_float(value: float | pd.Series) -> float:
@@ -20,6 +20,34 @@ def _as_float(value: float | pd.Series) -> float:
     return float(scalar)
 
 
+def estimate_gbm_parameters(returns: pd.Series) -> tuple[float, float]:
+    """Estimate GBM drift and volatility from simple returns.
+
+    The returned parameters match the standard GBM formulation used by
+    :func:`simulate_gbm` where log returns have mean
+    ``(mu - 0.5*sigma**2) * dt`` and standard deviation
+    ``sigma * sqrt(dt)``.
+    """
+
+    if returns.empty:
+        raise ValueError("returns must contain at least one observation")
+
+    cleaned = pd.to_numeric(returns, errors="coerce").dropna()
+    if cleaned.empty:
+        raise ValueError("returns must contain at least one numeric observation")
+
+    values = cleaned.to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError("returns must contain only finite values")
+    if (values <= -1.0).any():
+        raise ValueError("returns must be greater than -1.0")
+
+    log_returns = np.log1p(values)
+    sigma = float(log_returns.std(ddof=1))
+    mu = float(log_returns.mean() + 0.5 * sigma**2)
+    return mu, sigma
+
+
 def simulate_prices(
     returns: pd.Series,
     days: int,
@@ -30,9 +58,10 @@ def simulate_prices(
 ) -> pd.DataFrame:
     """Vectorized Monte Carlo simulation of future prices using historical data.
 
-    The function estimates drift and volatility directly from the supplied
-    return series and applies them to a geometric random walk. Providing
-    ``current_price`` converts the normalised paths into absolute price levels.
+    The default approach bootstraps (resamples) historical returns with
+    replacement to preserve the empirical distribution (fat tails, skew,
+    etc.). Providing ``current_price`` converts the normalised paths into
+    absolute price levels.
 
     Parameters
     ----------
@@ -65,17 +94,29 @@ def simulate_prices(
 
     if days <= 0 or scenarios <= 0:
         raise ValueError("days and scenarios must be positive integers")
+    if dt <= 0:
+        raise ValueError("dt must be positive")
     if returns.empty:
         raise ValueError("returns must contain at least one observation")
 
+    cleaned = pd.to_numeric(returns, errors="coerce").dropna()
+    if cleaned.empty:
+        raise ValueError("returns must contain at least one numeric observation")
+
+    values = cleaned.to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError("returns must contain only finite values")
+    if (values <= -1.0).any():
+        raise ValueError("returns must be greater than -1.0")
+
     rng = np.random.default_rng(seed)
+    sample_indices = rng.integers(0, values.shape[0], size=(days, scenarios))
+    sampled_returns = values[sample_indices]
 
-    drift = float(returns.mean())
-    volatility = float(returns.std())
+    if dt != 1.0:
+        sampled_returns = np.expm1(np.log1p(sampled_returns) * dt)
 
-    shocks = rng.standard_normal(size=(days, scenarios))
-    rets = drift * dt + volatility * np.sqrt(dt) * shocks
-    cumulative = np.cumprod(1 + rets, axis=0)
+    cumulative = np.cumprod(1 + sampled_returns, axis=0)
 
     if current_price is not None:
         price_scalar = _as_float(current_price)
@@ -106,9 +147,9 @@ def simulate_gbm(
         Starting price for the simulation. If a Series is passed the final
         value is used.
     mu : float
-        Expected return per time step.
+        Drift term of the GBM process per time unit.
     sigma : float
-        Volatility per time step.
+        Volatility per time unit.
     days : int
         Number of future days to simulate.
     scenarios : int
@@ -132,6 +173,8 @@ def simulate_gbm(
 
     if days <= 0 or scenarios <= 0:
         raise ValueError("days and scenarios must be positive integers")
+    if dt <= 0:
+        raise ValueError("dt must be positive")
     if sigma < 0:
         raise ValueError("sigma must be non-negative")
 

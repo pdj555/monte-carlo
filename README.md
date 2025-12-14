@@ -58,9 +58,12 @@ Notable options:
 | `--model` | `historical` (default) or `gbm` for geometric Brownian motion. |
 | `--seed` | Fix the random seed to obtain reproducible paths. |
 | `--output` | Directory where distribution and path plots are saved. |
+| `--max-paths` | Cap how many scenarios are drawn in the path plot (0 = all). |
+| `--no-plots` | Skip generating plots (faster for large runs). |
 | `--no-show` | Skip displaying plots (useful on servers/CI). |
 | `--offline-path` | Directory or CSV file used when offline data is required. |
 | `--offline-only` | Never hit the network—expect local CSV data. |
+| `--strict` | Exit non-zero if any ticker fails. |
 
 Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices.
 

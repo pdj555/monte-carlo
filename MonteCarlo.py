@@ -77,11 +77,11 @@ def main() -> None:
     print(summary.to_string(float_format=lambda value: f"{value:0.2f}"))
 
     # 3. Display a histogram of where each scenario ends up
-    plot_distribution(sims, ticker=args.ticker)
+    plot_distribution(sims, ticker=args.ticker, current_price=float(current_price))
     plt.show()
 
     # 4. Visualise a subset of simulated paths over time
-    plot_paths(sims, ticker=args.ticker)
+    plot_paths(sims, ticker=args.ticker, current_price=float(current_price))
     plt.show()
 
 
