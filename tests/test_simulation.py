@@ -73,3 +73,31 @@ def test_simulate_prices_rejects_invalid_dt():
     returns = pd.Series([0.01, -0.02, 0.015])
     with pytest.raises(ValueError):
         simulate_prices(returns, days=10, scenarios=5, dt=0.0)
+
+
+def test_shock_overlay_reduces_terminal_prices():
+    returns = pd.Series([0.01, 0.0, -0.01, 0.02, 0.005])
+
+    baseline = simulate_prices(returns, days=15, scenarios=200, seed=42)
+    shocked = simulate_prices(
+        returns,
+        days=15,
+        scenarios=200,
+        seed=42,
+        shock_probability=0.2,
+        shock_return=-0.2,
+    )
+
+    assert shocked.iloc[-1].mean() < baseline.iloc[-1].mean()
+
+
+def test_simulate_gbm_rejects_invalid_shock_probability():
+    with pytest.raises(ValueError):
+        simulate_gbm(
+            current_price=100.0,
+            mu=0.001,
+            sigma=0.02,
+            days=5,
+            scenarios=10,
+            shock_probability=1.5,
+        )

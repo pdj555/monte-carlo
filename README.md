@@ -68,6 +68,8 @@ Notable options:
 | `--min-prob-up` | Minimum probability of finishing above current price. |
 | `--max-var-95-pct` | Maximum tolerated 95% VaR (as % of current price). |
 | `--max-drawdown-q95-pct` | Optional cap on path max drawdown (95th percentile) to hard-filter fragile setups. |
+| `--shock-probability` | Inject rare stress events per step (0-1) to pressure-test fragility. |
+| `--shock-return` | Return applied on stress events (e.g. `-0.2` for a 20% drop). |
 
 Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices. The CLI now also reports **path-risk drawdown metrics** (`max_drawdown_mean`, `max_drawdown_q95`, and probability of breaching 10%/20% drawdowns), which are more decision-useful than endpoint-only stats. When you pass multiple tickers to `cli.py`, it also emits an **equal-weight portfolio** summary so you can judge basket-level upside/downside instead of isolated symbols.
 
@@ -100,3 +102,15 @@ The tests exercise the simulation routines, summary statistics and CLI entry poi
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+
+### Stress-test mode
+
+Use stress mode to move from optimistic backtests to brutal downside realism:
+
+```bash
+python cli.py --tickers AAPL,MSFT --days 252 --scenarios 5000 --model gbm \
+  --shock-probability 0.02 --shock-return -0.2 --no-show
+```
+
+This overlays rare shock events on every simulated path and exposes which tickers still survive when tail risk actually happens.
