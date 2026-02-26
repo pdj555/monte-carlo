@@ -199,3 +199,64 @@ def test_cli_drawdown_guardrail_can_force_avoid(tmp_path):
 
     assert ranking["recommendation"] == "AVOID"
     assert "max_drawdown_q95>20.0%" in ranking["guardrail_reasons"]
+
+
+def test_cli_shock_inputs_validation():
+    with pytest.raises(SystemExit):
+        parse_args(["--shock-probability", "1.1"])
+
+    with pytest.raises(SystemExit):
+        parse_args(["--shock-return", "-1.0"])
+
+
+def test_cli_shock_mode_lowers_expected_return(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.4)
+
+    base = run(
+        parse_args(
+            [
+                "--tickers",
+                "AAPL",
+                "--days",
+                "30",
+                "--scenarios",
+                "300",
+                "--seed",
+                "7",
+                "--no-show",
+                "--no-plots",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+            ]
+        )
+    )
+    shocked = run(
+        parse_args(
+            [
+                "--tickers",
+                "AAPL",
+                "--days",
+                "30",
+                "--scenarios",
+                "300",
+                "--seed",
+                "7",
+                "--no-show",
+                "--no-plots",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+                "--shock-probability",
+                "0.2",
+                "--shock-return",
+                "-0.2",
+            ]
+        )
+    )
+
+    base_er = base["report"]["results"]["AAPL"]["summary"]["expected_return"]
+    shock_er = shocked["report"]["results"]["AAPL"]["summary"]["expected_return"]
+    assert shock_er < base_er
