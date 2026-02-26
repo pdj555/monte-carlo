@@ -105,6 +105,11 @@ def test_cli_rejects_negative_portfolio_risk_budget_pct():
         parse_args(["--portfolio-risk-budget-pct", "-0.01"])
 
 
+def test_cli_rejects_negative_annual_cash_yield():
+    with pytest.raises(SystemExit):
+        parse_args(["--annual-cash-yield", "-0.01"])
+
+
 def test_cli_no_plots_skips_plot_files(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -464,3 +469,38 @@ def test_cli_accepts_block_bootstrap_for_historical_model(tmp_path):
     )
 
     assert result["report"]["results"]["AAPL"]["summary"]["mean"] > 0
+
+
+def test_cli_report_includes_benchmark_metrics(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.25)
+
+    result = run(
+        parse_args(
+            [
+                "--tickers",
+                "AAPL",
+                "--days",
+                "20",
+                "--scenarios",
+                "200",
+                "--seed",
+                "123",
+                "--no-show",
+                "--no-plots",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+                "--annual-cash-yield",
+                "0.10",
+            ]
+        )
+    )
+
+    summary = result["report"]["results"]["AAPL"]["summary"]
+
+    assert "benchmark_return_pct" in summary
+    assert "expected_excess_return" in summary
+    assert "prob_beat_benchmark" in summary
+
