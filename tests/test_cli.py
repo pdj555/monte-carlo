@@ -395,3 +395,40 @@ def test_cli_applies_portfolio_risk_budget_scaling(tmp_path):
 
     assert constrained_weight < unconstrained_weight
     assert constrained["report"]["portfolio_risk_budget_pct"] == pytest.approx(0.01)
+
+
+def test_cli_generates_execution_plan_when_capital_is_provided(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
+    _write_sample_csv(str(data_dir), "MSFT", trend=0.3)
+
+    output_dir = tmp_path / "out"
+
+    args = parse_args(
+        [
+            "--tickers",
+            "AAPL,MSFT",
+            "--days",
+            "20",
+            "--scenarios",
+            "25",
+            "--seed",
+            "123",
+            "--no-show",
+            "--output",
+            str(output_dir),
+            "--offline-path",
+            str(data_dir),
+            "--offline-only",
+            "--capital",
+            "10000",
+        ]
+    )
+
+    result = run(args)
+
+    assert result["report"]["execution_plan"]
+    first = next(iter(result["report"]["execution_plan"].values()))
+    assert "shares" in first
+    assert (output_dir / "execution_plan.csv").exists()
