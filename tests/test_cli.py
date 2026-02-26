@@ -209,6 +209,17 @@ def test_cli_shock_inputs_validation():
         parse_args(["--shock-return", "-1.0"])
 
 
+def test_cli_target_and_loss_guardrail_argument_validation():
+    with pytest.raises(SystemExit):
+        parse_args(["--min-prob-hit-target", "0.6"])
+
+    with pytest.raises(SystemExit):
+        parse_args(["--max-prob-breach-loss", "0.2"])
+
+    with pytest.raises(SystemExit):
+        parse_args(["--max-loss-pct", "-0.1"])
+
+
 def test_cli_shock_mode_lowers_expected_return(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -260,3 +271,45 @@ def test_cli_shock_mode_lowers_expected_return(tmp_path):
     base_er = base["report"]["results"]["AAPL"]["summary"]["expected_return"]
     shock_er = shocked["report"]["results"]["AAPL"]["summary"]["expected_return"]
     assert shock_er < base_er
+
+
+def test_cli_reports_target_and_loss_probabilities(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.3)
+
+    result = run(
+        parse_args(
+            [
+                "--tickers",
+                "AAPL",
+                "--days",
+                "20",
+                "--scenarios",
+                "200",
+                "--seed",
+                "123",
+                "--no-show",
+                "--no-plots",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+                "--target-return-pct",
+                "0.05",
+                "--max-loss-pct",
+                "0.08",
+                "--min-prob-hit-target",
+                "0.1",
+                "--max-prob-breach-loss",
+                "0.95",
+            ]
+        )
+    )
+
+    summary = result["report"]["results"]["AAPL"]["summary"]
+    ranking = result["report"]["rankings"]["AAPL"]
+
+    assert 0.0 <= summary["prob_hit_target"] <= 1.0
+    assert 0.0 <= summary["prob_breach_max_loss"] <= 1.0
+    assert "prob_hit_target" in ranking
+    assert "prob_breach_max_loss" in ranking
