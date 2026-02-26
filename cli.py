@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from ai import OpenAIConfigurationError, OpenAIRequestError, generate_ai_summary
-from analysis import summarize_equal_weight_portfolio, summarize_final_prices
+from analysis import rank_tickers, summarize_equal_weight_portfolio, summarize_final_prices
 from data import PriceDataError, fetch_prices
 from simulation import estimate_gbm_parameters, simulate_gbm, simulate_prices
 from viz import plot_distribution, plot_paths
@@ -367,6 +367,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         print(portfolio_summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
 
     summary_df = pd.DataFrame(summaries).T if summaries else pd.DataFrame()
+    rankings = rank_tickers(summary_df) if not summary_df.empty else pd.DataFrame()
+
+    if not rankings.empty:
+        print("\nTicker ranking")
+        display = rankings.loc[:, ["score", "expected_return", "prob_above_current", "value_at_risk_95_pct", "recommendation"]]
+        print(display.to_string(float_format=lambda v: f"{v:0.3f}"))
 
     report: dict[str, object] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -383,6 +389,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             for ticker in summaries
         },
         "portfolio_summary": (portfolio_summary.to_dict() if portfolio_summary is not None else None),
+        "rankings": rankings.to_dict(orient="index") if not rankings.empty else {},
         "errors": errors,
     }
 
@@ -393,6 +400,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
         with (output_dir / "report.json").open("w", encoding="utf-8") as handle:
             json.dump(report, handle, indent=2)
+
+        if not rankings.empty:
+            rankings.to_csv(output_dir / "rankings.csv", float_format="%.6g")
 
         if args.save_simulations and not combined.empty:
             combined.to_csv(output_dir / "simulations.csv.gz", compression="gzip")
