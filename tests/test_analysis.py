@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from analysis import summarize_equal_weight_portfolio, summarize_final_prices
+from analysis import rank_tickers, summarize_equal_weight_portfolio, summarize_final_prices
 
 
 def test_summarize_final_prices_reports_key_metrics():
@@ -54,3 +54,19 @@ def test_summarize_equal_weight_portfolio_combines_tickers():
     assert summary["component_count"] == 2.0
     assert summary["mean"] == pytest.approx(1.1)
     assert summary["expected_return"] == pytest.approx(0.1)
+
+
+def test_rank_tickers_orders_by_score():
+    summaries = pd.DataFrame(
+        {
+            "expected_return": {"AAPL": 0.15, "MSFT": 0.08, "TSLA": 0.22},
+            "prob_above_current": {"AAPL": 0.62, "MSFT": 0.55, "TSLA": 0.49},
+            "value_at_risk_95_pct": {"AAPL": 0.09, "MSFT": 0.04, "TSLA": 0.25},
+        }
+    )
+
+    ranked = rank_tickers(summaries)
+
+    assert list(ranked.index) == ["AAPL", "MSFT", "TSLA"]
+    assert ranked.loc["AAPL", "recommendation"] == "BUY"
+    assert ranked.loc["TSLA", "recommendation"] == "AVOID"
