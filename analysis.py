@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Mapping, Sequence
 
 import pandas as pd
 
@@ -81,4 +81,58 @@ def summarize_final_prices(
     return pd.Series(summary)
 
 
-__all__ = ["summarize_final_prices"]
+def summarize_equal_weight_portfolio(
+    simulations: pd.DataFrame,
+    *,
+    current_prices: Mapping[str, float],
+    quantiles: Sequence[float] | None = None,
+) -> pd.Series:
+    """Return summary statistics for an equal-weight portfolio.
+
+    Parameters
+    ----------
+    simulations : pandas.DataFrame
+        Combined simulation frame with ``ticker`` and ``scenario`` column levels.
+    current_prices : mapping of str to float
+        Mapping from ticker to observed current price.
+    quantiles : sequence of float, optional
+        Additional quantiles to report. Values must be between ``0`` and ``1``.
+    """
+
+    if simulations.empty:
+        raise ValueError("simulations must contain scenario paths")
+    if not isinstance(simulations.columns, pd.MultiIndex):
+        raise ValueError("simulations must use a ticker/scenario MultiIndex")
+
+    tickers = list(simulations.columns.get_level_values("ticker").unique())
+    if not tickers:
+        raise ValueError("simulations must include at least one ticker")
+
+    missing_prices = [ticker for ticker in tickers if ticker not in current_prices]
+    if missing_prices:
+        joined = ", ".join(sorted(missing_prices))
+        raise ValueError(f"current_prices missing entries for: {joined}")
+
+    for ticker in tickers:
+        if current_prices[ticker] <= 0:
+            raise ValueError("all current prices must be positive")
+
+    final_row = simulations.iloc[-1]
+    final_prices = final_row.unstack("ticker")
+    weights = pd.Series(1.0 / len(tickers), index=tickers)
+    initial_prices = pd.Series(
+        {ticker: float(current_prices[ticker]) for ticker in tickers}, dtype=float
+    )
+    shares = weights / initial_prices
+    portfolio_final = final_prices.mul(shares, axis="columns").sum(axis=1)
+
+    summary = summarize_final_prices(
+        pd.DataFrame([portfolio_final.to_numpy()]),
+        current_price=1.0,
+        quantiles=quantiles,
+    )
+    summary["component_count"] = float(len(tickers))
+    return summary
+
+
+__all__ = ["summarize_final_prices", "summarize_equal_weight_portfolio"]

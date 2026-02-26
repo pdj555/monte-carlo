@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from ai import OpenAIConfigurationError, OpenAIRequestError, generate_ai_summary
-from analysis import summarize_final_prices
+from analysis import summarize_equal_weight_portfolio, summarize_final_prices
 from data import PriceDataError, fetch_prices
 from simulation import estimate_gbm_parameters, simulate_gbm, simulate_prices
 from viz import plot_distribution, plot_paths
@@ -235,6 +235,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     combined_frames: list[pd.DataFrame] = []
     summaries: dict[str, pd.Series] = {}
+    current_prices: dict[str, float] = {}
     artefacts: dict[str, dict[str, str]] = {}
     errors: list[dict[str, str]] = []
     ai_summaries: dict[str, str] = {}
@@ -265,6 +266,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             continue
 
         current_price = float(prices.iloc[-1])
+        current_prices[ticker] = current_price
         ticker_seed = (
             None
             if args.seed is None
@@ -355,6 +357,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 plt.close(fig_paths)
 
     combined = pd.concat(combined_frames, axis=1) if combined_frames else pd.DataFrame()
+    portfolio_summary: pd.Series | None = None
+    if len(summaries) > 1 and not combined.empty:
+        portfolio_summary = summarize_equal_weight_portfolio(
+            combined,
+            current_prices=current_prices,
+        )
+        print("\nSummary for EQUAL_WEIGHT_PORTFOLIO")
+        print(portfolio_summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
+
     summary_df = pd.DataFrame(summaries).T if summaries else pd.DataFrame()
 
     report: dict[str, object] = {
@@ -371,6 +382,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             }
             for ticker in summaries
         },
+        "portfolio_summary": (portfolio_summary.to_dict() if portfolio_summary is not None else None),
         "errors": errors,
     }
 
