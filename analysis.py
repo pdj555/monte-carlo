@@ -179,4 +179,64 @@ def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
     return ranking
 
 
-__all__ = ["rank_tickers", "summarize_final_prices", "summarize_equal_weight_portfolio"]
+def recommend_allocations(
+    rankings: pd.DataFrame,
+    *,
+    max_weight: float = 0.6,
+) -> pd.DataFrame:
+    """Convert ticker rankings into pragmatic portfolio weights.
+
+    The strategy is intentionally simple and conservative:
+
+    * Drop tickers labeled ``AVOID``.
+    * Use only positive score signal.
+    * Scale signal by downside risk so high-VaR names receive smaller weights.
+    * Normalize to weights that sum to ``1.0`` and cap concentration.
+
+    Parameters
+    ----------
+    rankings : pandas.DataFrame
+        Output of :func:`rank_tickers`.
+    max_weight : float, default 0.6
+        Maximum weight assigned to a single ticker.
+    """
+
+    if rankings.empty:
+        return pd.DataFrame(columns=["score", "value_at_risk_95_pct", "weight"])
+
+    required = {"score", "value_at_risk_95_pct", "recommendation"}
+    missing = sorted(required - set(rankings.columns))
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(f"rankings missing required columns: {joined}")
+    if not 0 < max_weight <= 1:
+        raise ValueError("max_weight must be between 0 and 1")
+
+    eligible = rankings[rankings["recommendation"] != "AVOID"].copy()
+    if eligible.empty:
+        return pd.DataFrame(columns=["score", "value_at_risk_95_pct", "weight"])
+
+    signal = eligible["score"].clip(lower=0.0)
+    risk_scale = 1.0 / (1.0 + eligible["value_at_risk_95_pct"].clip(lower=0.0))
+    raw = signal * risk_scale
+
+    if float(raw.sum()) <= 0:
+        raw = pd.Series(1.0, index=eligible.index)
+
+    weights = raw / raw.sum()
+    weights = weights.clip(upper=max_weight)
+    weights = weights / weights.sum()
+
+    allocation = eligible.loc[:, ["score", "value_at_risk_95_pct"]].copy()
+    allocation["weight"] = weights
+    allocation = allocation.sort_values("weight", ascending=False)
+    allocation.index.name = "ticker"
+    return allocation
+
+
+__all__ = [
+    "rank_tickers",
+    "recommend_allocations",
+    "summarize_final_prices",
+    "summarize_equal_weight_portfolio",
+]
