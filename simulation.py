@@ -10,6 +10,13 @@ import pandas as pd
 __all__ = ["estimate_gbm_parameters", "simulate_prices", "simulate_gbm"]
 
 
+def _validate_shock_inputs(shock_probability: float, shock_return: float) -> None:
+    if not 0.0 <= shock_probability <= 1.0:
+        raise ValueError("shock_probability must be between 0 and 1")
+    if shock_return <= -1.0:
+        raise ValueError("shock_return must be greater than -1.0")
+
+
 def _as_float(value: float | pd.Series) -> float:
     """Return a scalar float from ``value`` which may be a pandas object."""
 
@@ -55,6 +62,8 @@ def simulate_prices(
     dt: float = 1.0,
     seed: Optional[int] = None,
     current_price: Optional[float | pd.Series] = None,
+    shock_probability: float = 0.0,
+    shock_return: float = -0.15,
 ) -> pd.DataFrame:
     """Vectorized Monte Carlo simulation of future prices using historical data.
 
@@ -96,6 +105,7 @@ def simulate_prices(
         raise ValueError("days and scenarios must be positive integers")
     if dt <= 0:
         raise ValueError("dt must be positive")
+    _validate_shock_inputs(shock_probability, shock_return)
     if returns.empty:
         raise ValueError("returns must contain at least one observation")
 
@@ -112,6 +122,14 @@ def simulate_prices(
     rng = np.random.default_rng(seed)
     sample_indices = rng.integers(0, values.shape[0], size=(days, scenarios))
     sampled_returns = values[sample_indices]
+
+    if shock_probability > 0.0:
+        shock_mask = rng.random(size=(days, scenarios)) < shock_probability
+        sampled_returns = np.where(
+            shock_mask,
+            (1.0 + sampled_returns) * (1.0 + shock_return) - 1.0,
+            sampled_returns,
+        )
 
     if dt != 1.0:
         sampled_returns = np.expm1(np.log1p(sampled_returns) * dt)
@@ -138,6 +156,8 @@ def simulate_gbm(
     scenarios: int,
     dt: float = 1.0,
     seed: Optional[int] = None,
+    shock_probability: float = 0.0,
+    shock_return: float = -0.15,
 ) -> pd.DataFrame:
     """Simulate price paths using the geometric Brownian motion model.
 
@@ -177,6 +197,7 @@ def simulate_gbm(
         raise ValueError("dt must be positive")
     if sigma < 0:
         raise ValueError("sigma must be non-negative")
+    _validate_shock_inputs(shock_probability, shock_return)
 
     start_price = _as_float(current_price)
     if start_price <= 0:
@@ -188,6 +209,9 @@ def simulate_gbm(
     drift = (mu - 0.5 * sigma**2) * dt
     diffusion = sigma * np.sqrt(dt) * shocks
     log_returns = drift + diffusion
+    if shock_probability > 0.0:
+        shock_mask = rng.random(size=(days, scenarios)) < shock_probability
+        log_returns = np.where(shock_mask, log_returns + np.log1p(shock_return), log_returns)
     cumulative = np.exp(np.cumsum(log_returns, axis=0)) * start_price
 
     index = pd.RangeIndex(start=1, stop=days + 1, name="day")

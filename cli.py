@@ -119,6 +119,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Time increment for each simulation step (in trading days).",
     )
     parser.add_argument(
+        "--shock-probability",
+        type=float,
+        default=0.0,
+        help=(
+            "Probability (0-1) of a shock event at each simulated step. "
+            "Use 0 for normal mode."
+        ),
+    )
+    parser.add_argument(
+        "--shock-return",
+        type=float,
+        default=-0.15,
+        help="Simple return applied on shock days (e.g. -0.15 = -15%%).",
+    )
+    parser.add_argument(
         "--seed",
         type=_non_negative_int,
         default=None,
@@ -232,7 +247,12 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     """Return parsed CLI arguments."""
 
     parser = build_parser()
-    return parser.parse_args(list(argv) if argv is not None else None)
+    args = parser.parse_args(list(argv) if argv is not None else None)
+    if not 0.0 <= float(args.shock_probability) <= 1.0:
+        parser.error("--shock-probability must be between 0 and 1")
+    if float(args.shock_return) <= -1.0:
+        parser.error("--shock-return must be greater than -1.0")
+    return args
 
 
 def _normalise_tickers(ticker_arg: str) -> list[str]:
@@ -314,6 +334,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 dt=args.dt,
                 seed=ticker_seed,
                 current_price=current_price,
+                shock_probability=float(args.shock_probability),
+                shock_return=float(args.shock_return),
             )
         else:
             mu, sigma = estimate_gbm_parameters(returns)
@@ -325,6 +347,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 scenarios=args.scenarios,
                 dt=args.dt,
                 seed=ticker_seed,
+                shock_probability=float(args.shock_probability),
+                shock_return=float(args.shock_return),
             )
 
         sims = sims.copy()
