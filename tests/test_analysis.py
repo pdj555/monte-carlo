@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from analysis import (
+    apply_risk_guards,
     build_action_plan,
     rank_tickers,
     recommend_allocations,
@@ -207,3 +208,26 @@ def test_build_action_plan_returns_no_trade_when_empty():
 
     assert plan["stance"] == "NO_TRADE"
     assert plan["primary_pick"] is None
+
+
+def test_apply_risk_guards_marks_failures_as_avoid():
+    rankings = pd.DataFrame(
+        {
+            "score": {"AAPL": 12.0, "TSLA": 11.0},
+            "expected_return": {"AAPL": 0.12, "TSLA": 0.09},
+            "prob_above_current": {"AAPL": 0.64, "TSLA": 0.49},
+            "value_at_risk_95_pct": {"AAPL": 0.09, "TSLA": 0.31},
+            "recommendation": {"AAPL": "BUY", "TSLA": "BUY"},
+        }
+    )
+
+    guarded = apply_risk_guards(
+        rankings,
+        min_expected_return=0.1,
+        min_prob_above_current=0.55,
+        max_value_at_risk_95_pct=0.2,
+    )
+
+    assert guarded.loc["AAPL", "recommendation"] == "BUY"
+    assert guarded.loc["TSLA", "recommendation"] == "AVOID"
+    assert "prob_above_current<55%" in guarded.loc["TSLA", "guardrail_reasons"]
