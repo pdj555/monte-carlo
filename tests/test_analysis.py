@@ -29,6 +29,10 @@ def test_summarize_final_prices_reports_key_metrics():
         "expected_shortfall_95",
         "value_at_risk_99",
         "expected_shortfall_99",
+        "avg_upside_pct",
+        "avg_downside_pct",
+        "payoff_ratio",
+        "kelly_fraction",
     } <= set(summary.index)
     assert 0.0 <= summary["prob_above_current"] <= 1.0
     assert 0.0 <= summary["prob_below_current"] <= 1.0
@@ -37,6 +41,7 @@ def test_summarize_final_prices_reports_key_metrics():
     assert summary["expected_shortfall_95"] >= summary["value_at_risk_95"]
     assert 0.0 <= summary["max_drawdown_q95"] <= 1.0
     assert 0.0 <= summary["prob_drawdown_20_pct"] <= 1.0
+    assert 0.0 <= summary["kelly_fraction"] <= 1.0
 
 
 def test_summarize_final_prices_requires_data():
@@ -96,6 +101,21 @@ def test_rank_tickers_prefers_expected_shortfall_when_available():
     assert list(ranked.index) == ["MSFT", "AAPL"]
 
 
+def test_rank_tickers_uses_kelly_fraction_as_conviction_boost():
+    summaries = pd.DataFrame(
+        {
+            "expected_return": {"AAPL": 0.1, "MSFT": 0.1},
+            "prob_above_current": {"AAPL": 0.58, "MSFT": 0.58},
+            "value_at_risk_95_pct": {"AAPL": 0.08, "MSFT": 0.08},
+            "kelly_fraction": {"AAPL": 0.75, "MSFT": 0.05},
+        }
+    )
+
+    ranked = rank_tickers(summaries)
+
+    assert list(ranked.index) == ["AAPL", "MSFT"]
+
+
 def test_recommend_allocations_uses_expected_shortfall_when_available():
     rankings = pd.DataFrame(
         {
@@ -109,6 +129,21 @@ def test_recommend_allocations_uses_expected_shortfall_when_available():
     allocation = recommend_allocations(rankings)
 
     assert allocation.loc["MSFT", "weight"] > allocation.loc["AAPL", "weight"]
+
+
+def test_recommend_allocations_respects_kelly_signal_boost():
+    rankings = pd.DataFrame(
+        {
+            "score": {"AAPL": 10.0, "MSFT": 10.0},
+            "value_at_risk_95_pct": {"AAPL": 0.08, "MSFT": 0.08},
+            "kelly_fraction": {"AAPL": 0.7, "MSFT": 0.1},
+            "recommendation": {"AAPL": "BUY", "MSFT": "BUY"},
+        }
+    )
+
+    allocation = recommend_allocations(rankings)
+
+    assert allocation.loc["AAPL", "weight"] > allocation.loc["MSFT", "weight"]
 
 
 def test_recommend_allocations_outputs_normalized_weights():
