@@ -67,6 +67,8 @@ Notable options:
 
 Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices. When you pass multiple tickers to `cli.py`, it now also emits an **equal-weight portfolio** summary so you can judge basket-level upside/downside instead of isolated symbols.
 
+The CLI now also prints a concise **Action plan** section (stance, primary pick, and avoid list) and saves the same guidance to `action_plan.md` in the output directory. This gives a decision-oriented readout rather than raw metrics only.
+
 ## Offline Data
 
 When internet access is restricted, pass `--offline-only` so `cli.py` and the underlying `fetch_prices` helper use CSV data exclusively. CSV files should contain `Date` and `Close` columns. By default the repository looks for `sample_data/<TICKER>.csv` but you can point to your own directory via `--offline-path /path/to/csvs`.
