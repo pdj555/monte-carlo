@@ -72,6 +72,7 @@ Notable options:
 Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices. The CLI now also reports **path-risk drawdown metrics** (`max_drawdown_mean`, `max_drawdown_q95`, and probability of breaching 10%/20% drawdowns), which are more decision-useful than endpoint-only stats. When you pass multiple tickers to `cli.py`, it also emits an **equal-weight portfolio** summary so you can judge basket-level upside/downside instead of isolated symbols.
 
 The CLI now also prints a concise **Action plan** section (stance, primary pick, and avoid list) and saves the same guidance to `action_plan.md` in the output directory. This gives a decision-oriented readout rather than raw metrics only.
+It now also estimates **payoff asymmetry** (`avg_upside_pct`, `avg_downside_pct`, `payoff_ratio`) and a capped **Kelly fraction** signal per ticker, then uses that conviction signal to tilt ranking/allocation toward setups with stronger risk-reward geometry.
 
 For decisive execution, use guardrails to enforce your risk policy directly in ranking/allocation output, e.g.:
 
