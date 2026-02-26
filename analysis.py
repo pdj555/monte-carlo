@@ -201,7 +201,9 @@ def recommend_allocations(
     * Use only positive score signal.
     * Scale signal by downside risk so high-risk names receive smaller weights.
       When available, expected shortfall is preferred over VaR.
-    * Normalize to weights that sum to ``1.0`` and cap concentration.
+    * Normalize to weights that sum to ``1.0`` when feasible and cap concentration.
+      If the cap is too strict (e.g. one eligible ticker with ``max_weight=0.6``),
+      the remaining capital is intentionally left as cash.
 
     Parameters
     ----------
@@ -239,9 +241,25 @@ def recommend_allocations(
     if float(raw.sum()) <= 0:
         raw = pd.Series(1.0, index=eligible.index)
 
-    weights = raw / raw.sum()
-    weights = weights.clip(upper=max_weight)
-    weights = weights / weights.sum()
+    target_invested = min(1.0, len(eligible) * max_weight)
+    priorities = raw / raw.sum()
+
+    low = 0.0
+    high = 1.0
+    while float(priorities.mul(high).clip(upper=max_weight).sum()) < target_invested:
+        high *= 2.0
+
+    for _ in range(60):
+        alpha = (low + high) / 2.0
+        invested = float(priorities.mul(alpha).clip(upper=max_weight).sum())
+        if invested < target_invested:
+            low = alpha
+        else:
+            high = alpha
+
+    weights = priorities.mul(high).clip(upper=max_weight)
+    if float(weights.sum()) > 0:
+        weights *= target_invested / float(weights.sum())
 
     allocation = eligible.loc[:, ["score", "value_at_risk_95_pct"]].copy()
     allocation["weight"] = weights
@@ -276,6 +294,7 @@ def build_action_plan(
             "primary_pick": None,
             "focus_list": [],
             "avoid_list": [],
+            "cash_weight": 1.0,
         }
 
     avoid_list = rankings.index[rankings["recommendation"] == "AVOID"].tolist()
@@ -288,6 +307,7 @@ def build_action_plan(
             "primary_pick": None,
             "focus_list": [],
             "avoid_list": avoid_list,
+            "cash_weight": 1.0,
         }
 
     top_ticker = allocations.index[0]
@@ -310,6 +330,9 @@ def build_action_plan(
         f"{verb} in {top_ticker} ({top_weight:.1%} weight, score {top_score:.1f}). "
         "Avoid weak names."
     )
+    cash_weight = max(0.0, 1.0 - float(allocations["weight"].sum()))
+    if cash_weight > 0:
+        headline = f"{headline} Keep {cash_weight:.1%} in cash."
 
     return {
         "stance": stance,
@@ -324,4 +347,5 @@ def build_action_plan(
         },
         "focus_list": focus_list,
         "avoid_list": avoid_list,
+        "cash_weight": cash_weight,
     }

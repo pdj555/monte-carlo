@@ -163,6 +163,45 @@ def test_build_action_plan_returns_risk_on_for_high_conviction():
     assert plan["avoid_list"] == ["TSLA"]
 
 
+
+
+def test_recommend_allocations_leaves_cash_when_cap_is_binding():
+    rankings = pd.DataFrame(
+        {
+            "score": {"AAPL": 15.0},
+            "value_at_risk_95_pct": {"AAPL": 0.08},
+            "recommendation": {"AAPL": "BUY"},
+        }
+    )
+
+    allocation = recommend_allocations(rankings, max_weight=0.6)
+
+    assert allocation.loc["AAPL", "weight"] == pytest.approx(0.6)
+
+
+def test_build_action_plan_reports_cash_buffer_when_not_fully_invested():
+    rankings = pd.DataFrame(
+        {
+            "score": {"AAPL": 15.0},
+            "expected_return": {"AAPL": 0.2},
+            "prob_above_current": {"AAPL": 0.62},
+            "value_at_risk_95_pct": {"AAPL": 0.08},
+            "recommendation": {"AAPL": "BUY"},
+        }
+    )
+    allocations = pd.DataFrame(
+        {
+            "score": {"AAPL": 15.0},
+            "value_at_risk_95_pct": {"AAPL": 0.08},
+            "weight": {"AAPL": 0.6},
+        }
+    )
+
+    plan = build_action_plan(rankings, allocations)
+
+    assert plan["cash_weight"] == pytest.approx(0.4)
+    assert "Keep 40.0% in cash." in plan["headline"]
+
 def test_build_action_plan_returns_no_trade_when_empty():
     plan = build_action_plan(pd.DataFrame(), pd.DataFrame())
 
