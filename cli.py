@@ -206,6 +206,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum allowed 95%% VaR as a percent of current price (e.g. 0.20 = 20%%).",
     )
     parser.add_argument(
+        "--max-drawdown-q95-pct",
+        type=float,
+        default=None,
+        help=(
+            "Optional cap on 95th percentile max drawdown (e.g. 0.30 = 30%%). "
+            "Tickers above this are forced to AVOID."
+        ),
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="Return a non-zero exit code if any ticker fails.",
@@ -399,6 +408,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             min_expected_return=float(args.min_expected_return),
             min_prob_above_current=float(args.min_prob_up),
             max_value_at_risk_95_pct=float(args.max_var_95_pct),
+            max_drawdown_q95=(
+                None
+                if args.max_drawdown_q95_pct is None
+                else float(args.max_drawdown_q95_pct)
+            ),
         )
         if not rankings.empty
         else rankings
@@ -415,6 +429,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "expected_return",
                 "prob_above_current",
                 "value_at_risk_95_pct",
+                "max_drawdown_q95",
                 "recommendation",
                 "guardrail_reasons",
             ],
