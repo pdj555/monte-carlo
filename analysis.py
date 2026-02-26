@@ -147,6 +147,8 @@ def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
     summaries : pandas.DataFrame
         Summary table where rows are tickers and columns contain at least
         ``expected_return``, ``prob_above_current`` and ``value_at_risk_95_pct``.
+        When available, ``expected_shortfall_95_pct`` is used as the downside
+        penalty because it captures tail severity better than VaR.
 
     Returns
     -------
@@ -166,10 +168,17 @@ def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"summaries missing required columns: {joined}")
 
     ranking = summaries.loc[:, sorted(required)].copy()
+    downside_col = "expected_shortfall_95_pct"
+    if downside_col in summaries.columns:
+        ranking[downside_col] = summaries[downside_col]
+        downside_penalty = ranking[downside_col]
+    else:
+        downside_penalty = ranking["value_at_risk_95_pct"]
+
     ranking["score"] = (
         ranking["expected_return"] * 100.0
         + (ranking["prob_above_current"] - 0.5) * 40.0
-        - ranking["value_at_risk_95_pct"] * 100.0
+        - downside_penalty * 100.0
     )
     ranking["recommendation"] = "WATCH"
     ranking.loc[ranking["score"] >= 10.0, "recommendation"] = "BUY"
@@ -190,7 +199,8 @@ def recommend_allocations(
 
     * Drop tickers labeled ``AVOID``.
     * Use only positive score signal.
-    * Scale signal by downside risk so high-VaR names receive smaller weights.
+    * Scale signal by downside risk so high-risk names receive smaller weights.
+      When available, expected shortfall is preferred over VaR.
     * Normalize to weights that sum to ``1.0`` and cap concentration.
 
     Parameters
@@ -216,8 +226,14 @@ def recommend_allocations(
     if eligible.empty:
         return pd.DataFrame(columns=["score", "value_at_risk_95_pct", "weight"])
 
+    downside_col = (
+        "expected_shortfall_95_pct"
+        if "expected_shortfall_95_pct" in eligible.columns
+        else "value_at_risk_95_pct"
+    )
+
     signal = eligible["score"].clip(lower=0.0)
-    risk_scale = 1.0 / (1.0 + eligible["value_at_risk_95_pct"].clip(lower=0.0))
+    risk_scale = 1.0 / (1.0 + eligible[downside_col].clip(lower=0.0))
     raw = signal * risk_scale
 
     if float(raw.sum()) <= 0:
