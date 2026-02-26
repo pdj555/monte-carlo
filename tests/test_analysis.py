@@ -4,7 +4,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from analysis import rank_tickers, summarize_equal_weight_portfolio, summarize_final_prices
+from analysis import (
+    rank_tickers,
+    recommend_allocations,
+    summarize_equal_weight_portfolio,
+    summarize_final_prices,
+)
 
 
 def test_summarize_final_prices_reports_key_metrics():
@@ -70,3 +75,33 @@ def test_rank_tickers_orders_by_score():
     assert list(ranked.index) == ["AAPL", "MSFT", "TSLA"]
     assert ranked.loc["AAPL", "recommendation"] == "BUY"
     assert ranked.loc["TSLA", "recommendation"] == "AVOID"
+
+
+def test_recommend_allocations_outputs_normalized_weights():
+    rankings = pd.DataFrame(
+        {
+            "score": {"AAPL": 14.0, "MSFT": 7.0, "TSLA": -2.0},
+            "value_at_risk_95_pct": {"AAPL": 0.10, "MSFT": 0.04, "TSLA": 0.25},
+            "recommendation": {"AAPL": "BUY", "MSFT": "WATCH", "TSLA": "AVOID"},
+        }
+    )
+
+    allocation = recommend_allocations(rankings, max_weight=0.7)
+
+    assert list(allocation.index) == ["AAPL", "MSFT"]
+    assert allocation["weight"].sum() == pytest.approx(1.0)
+    assert allocation["weight"].max() <= 0.7
+
+
+def test_recommend_allocations_returns_empty_when_only_avoid():
+    rankings = pd.DataFrame(
+        {
+            "score": {"TSLA": -5.0},
+            "value_at_risk_95_pct": {"TSLA": 0.30},
+            "recommendation": {"TSLA": "AVOID"},
+        }
+    )
+
+    allocation = recommend_allocations(rankings)
+
+    assert allocation.empty
