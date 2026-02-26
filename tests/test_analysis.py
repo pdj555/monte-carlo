@@ -69,6 +69,30 @@ def test_summarize_final_prices_reports_target_and_loss_probabilities():
     assert summary["prob_breach_max_loss"] == pytest.approx(0.25)
 
 
+def test_summarize_final_prices_reports_path_touch_metrics_for_targets_and_stops():
+    df = pd.DataFrame(
+        {
+            0: [100.0, 108.0, 111.0],
+            1: [100.0, 96.0, 89.0],
+            2: [100.0, 101.0, 103.0],
+            3: [100.0, 112.0, 109.0],
+        }
+    )
+
+    summary = summarize_final_prices(
+        df,
+        current_price=100.0,
+        target_return_pct=0.1,
+        max_loss_pct=0.1,
+    )
+
+    assert summary["prob_hit_target"] == pytest.approx(0.25)
+    assert summary["prob_touch_target"] == pytest.approx(0.5)
+    assert summary["median_days_to_target"] == pytest.approx(1.5)
+    assert summary["prob_breach_max_loss"] == pytest.approx(0.25)
+    assert summary["prob_touch_max_loss"] == pytest.approx(0.25)
+    assert summary["median_days_to_max_loss"] == pytest.approx(2.0)
+
 def test_summarize_final_prices_requires_data():
     with pytest.raises(ValueError):
         summarize_final_prices(pd.DataFrame())
