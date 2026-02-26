@@ -59,8 +59,10 @@ def test_cli_runs_multi_ticker(tmp_path):
     assert result["report"]["portfolio_summary"]["component_count"] == 2.0
     assert set(result["report"]["rankings"]) == {"AAPL", "MSFT"}
     assert result["report"]["allocations"]
+    assert result["report"]["action_plan"]["stance"] in {"RISK_ON", "SELECTIVE", "DEFENSIVE"}
     assert (output_dir / "rankings.csv").exists()
     assert (output_dir / "allocations.csv").exists()
+    assert (output_dir / "action_plan.md").exists()
 
 
 def test_cli_main_respects_strict_mode(tmp_path):

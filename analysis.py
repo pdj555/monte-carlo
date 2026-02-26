@@ -251,8 +251,77 @@ def recommend_allocations(
 
 
 __all__ = [
+    "build_action_plan",
     "rank_tickers",
     "recommend_allocations",
     "summarize_final_prices",
     "summarize_equal_weight_portfolio",
 ]
+
+
+def build_action_plan(
+    rankings: pd.DataFrame,
+    allocations: pd.DataFrame,
+) -> dict[str, object]:
+    """Build a lean action plan from ranking and allocation tables.
+
+    The output is intentionally direct so the CLI can produce decision-grade
+    guidance instead of only descriptive statistics.
+    """
+
+    if rankings.empty:
+        return {
+            "stance": "NO_TRADE",
+            "headline": "No valid opportunities found.",
+            "primary_pick": None,
+            "focus_list": [],
+            "avoid_list": [],
+        }
+
+    avoid_list = rankings.index[rankings["recommendation"] == "AVOID"].tolist()
+    focus = rankings[rankings["recommendation"] != "AVOID"]
+
+    if focus.empty or allocations.empty:
+        return {
+            "stance": "DEFENSIVE",
+            "headline": "All candidates are high-risk or low-conviction. Hold cash.",
+            "primary_pick": None,
+            "focus_list": [],
+            "avoid_list": avoid_list,
+        }
+
+    top_ticker = allocations.index[0]
+    top_row = rankings.loc[top_ticker]
+    top_weight = float(allocations.loc[top_ticker, "weight"])
+    top_score = float(top_row["score"])
+
+    if top_score >= 10 and top_weight >= 0.5:
+        stance = "RISK_ON"
+        verb = "Concentrate"
+    elif top_score > 0:
+        stance = "SELECTIVE"
+        verb = "Accumulate"
+    else:
+        stance = "DEFENSIVE"
+        verb = "Stay light"
+
+    focus_list = allocations.index.tolist()
+    headline = (
+        f"{verb} in {top_ticker} ({top_weight:.1%} weight, score {top_score:.1f}). "
+        "Avoid weak names."
+    )
+
+    return {
+        "stance": stance,
+        "headline": headline,
+        "primary_pick": {
+            "ticker": top_ticker,
+            "weight": top_weight,
+            "score": top_score,
+            "expected_return": float(top_row["expected_return"]),
+            "prob_above_current": float(top_row["prob_above_current"]),
+            "value_at_risk_95_pct": float(top_row["value_at_risk_95_pct"]),
+        },
+        "focus_list": focus_list,
+        "avoid_list": avoid_list,
+    }

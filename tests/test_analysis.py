@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from analysis import (
+    build_action_plan,
     rank_tickers,
     recommend_allocations,
     summarize_equal_weight_portfolio,
@@ -135,3 +136,35 @@ def test_recommend_allocations_returns_empty_when_only_avoid():
     allocation = recommend_allocations(rankings)
 
     assert allocation.empty
+
+
+def test_build_action_plan_returns_risk_on_for_high_conviction():
+    rankings = pd.DataFrame(
+        {
+            "score": {"AAPL": 16.0, "MSFT": 6.0, "TSLA": -4.0},
+            "expected_return": {"AAPL": 0.20, "MSFT": 0.09, "TSLA": -0.01},
+            "prob_above_current": {"AAPL": 0.65, "MSFT": 0.58, "TSLA": 0.45},
+            "value_at_risk_95_pct": {"AAPL": 0.08, "MSFT": 0.05, "TSLA": 0.25},
+            "recommendation": {"AAPL": "BUY", "MSFT": "WATCH", "TSLA": "AVOID"},
+        }
+    )
+    allocations = pd.DataFrame(
+        {
+            "score": {"AAPL": 16.0, "MSFT": 6.0},
+            "value_at_risk_95_pct": {"AAPL": 0.08, "MSFT": 0.05},
+            "weight": {"AAPL": 0.62, "MSFT": 0.38},
+        }
+    )
+
+    plan = build_action_plan(rankings, allocations)
+
+    assert plan["stance"] == "RISK_ON"
+    assert plan["primary_pick"]["ticker"] == "AAPL"
+    assert plan["avoid_list"] == ["TSLA"]
+
+
+def test_build_action_plan_returns_no_trade_when_empty():
+    plan = build_action_plan(pd.DataFrame(), pd.DataFrame())
+
+    assert plan["stance"] == "NO_TRADE"
+    assert plan["primary_pick"] is None
