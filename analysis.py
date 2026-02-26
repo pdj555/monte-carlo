@@ -16,6 +16,7 @@ def summarize_final_prices(
     quantiles: Sequence[float] | None = None,
     target_return_pct: float | None = None,
     max_loss_pct: float | None = None,
+    benchmark_return_pct: float | None = None,
 ) -> pd.Series:
     """Return summary statistics for the final simulated prices.
 
@@ -36,6 +37,10 @@ def summarize_final_prices(
         Maximum acceptable loss expressed as a positive fraction from
         ``current_price``. When provided, include end-of-horizon and path-level
         breach probabilities.
+    benchmark_return_pct : float, optional
+        Optional benchmark return over the same horizon (for example cash/yield).
+        When provided with ``current_price``, include probability of beating this
+        benchmark and expected excess return.
 
     Returns
     -------
@@ -109,6 +114,13 @@ def summarize_final_prices(
         summary["value_at_risk_99_pct"] = float(summary["value_at_risk_99"] / current_price)
         summary["expected_shortfall_99_pct"] = float(summary["expected_shortfall_99"] / current_price)
 
+        if benchmark_return_pct is not None:
+            benchmark_return_pct = float(benchmark_return_pct)
+            summary["benchmark_return_pct"] = benchmark_return_pct
+            realized_returns = final_prices / current_price - 1.0
+            summary["expected_excess_return"] = float(summary["expected_return"] - benchmark_return_pct)
+            summary["prob_beat_benchmark"] = float((realized_returns >= benchmark_return_pct).mean())
+
         if target_return_pct is not None:
             target_return_pct = float(target_return_pct)
             summary["target_return_pct"] = target_return_pct
@@ -163,6 +175,7 @@ def summarize_equal_weight_portfolio(
     *,
     current_prices: Mapping[str, float],
     quantiles: Sequence[float] | None = None,
+    benchmark_return_pct: float | None = None,
 ) -> pd.Series:
     """Return summary statistics for an equal-weight portfolio.
 
@@ -207,6 +220,7 @@ def summarize_equal_weight_portfolio(
         pd.DataFrame([portfolio_final.to_numpy()]),
         current_price=1.0,
         quantiles=quantiles,
+        benchmark_return_pct=benchmark_return_pct,
     )
     summary["component_count"] = float(len(tickers))
     return summary
@@ -264,12 +278,24 @@ def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
         else 0.0
     )
 
+    expected_return_signal = (
+        summaries["expected_excess_return"]
+        if "expected_excess_return" in summaries.columns
+        else ranking["expected_return"]
+    )
+    if "expected_excess_return" in summaries.columns:
+        ranking["expected_excess_return"] = summaries["expected_excess_return"]
+    if "prob_beat_benchmark" in summaries.columns:
+        ranking["prob_beat_benchmark"] = summaries["prob_beat_benchmark"]
+
     ranking["score"] = (
-        ranking["expected_return"] * 100.0
+        expected_return_signal * 100.0
         + (ranking["prob_above_current"] - 0.5) * 40.0
         - downside_penalty * 100.0
         - drawdown_penalty * 35.0
     )
+    if "prob_beat_benchmark" in ranking.columns:
+        ranking["score"] += (ranking["prob_beat_benchmark"] - 0.5) * 20.0
     if "kelly_fraction" in ranking.columns:
         ranking["score"] += ranking["kelly_fraction"] * 20.0
     ranking["recommendation"] = "WATCH"

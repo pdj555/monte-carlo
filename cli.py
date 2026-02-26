@@ -214,6 +214,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="OpenAI model name used when --ai-summary is enabled.",
     )
     parser.add_argument(
+        "--annual-cash-yield",
+        type=float,
+        default=0.04,
+        help=(
+            "Annualized cash benchmark yield used to compute excess-return metrics "
+            "(e.g. 0.04 = 4%% per year)."
+        ),
+    )
+    parser.add_argument(
         "--min-expected-return",
         type=float,
         default=0.0,
@@ -325,6 +334,8 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         parser.error("--max-prob-breach-loss requires --max-loss-pct")
     if float(args.portfolio_risk_budget_pct) < 0:
         parser.error("--portfolio-risk-budget-pct must be non-negative")
+    if float(args.annual_cash_yield) < 0:
+        parser.error("--annual-cash-yield must be non-negative")
     return args
 
 
@@ -369,6 +380,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     artefacts: dict[str, dict[str, str]] = {}
     errors: list[dict[str, str]] = []
     ai_summaries: dict[str, str] = {}
+    horizon_years = float(args.days) * float(args.dt) / 252.0
+    benchmark_return_pct = (1.0 + float(args.annual_cash_yield)) ** horizon_years - 1.0
 
     for ticker in tickers:
         try:
@@ -441,6 +454,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 None if args.target_return_pct is None else float(args.target_return_pct)
             ),
             max_loss_pct=(None if args.max_loss_pct is None else float(args.max_loss_pct)),
+            benchmark_return_pct=benchmark_return_pct,
         )
         summaries[ticker] = summary
 
@@ -502,6 +516,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         portfolio_summary = summarize_equal_weight_portfolio(
             combined,
             current_prices=current_prices,
+            benchmark_return_pct=benchmark_return_pct,
         )
         print("\nSummary for EQUAL_WEIGHT_PORTFOLIO")
         print(portfolio_summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
