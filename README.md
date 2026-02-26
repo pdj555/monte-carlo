@@ -75,10 +75,13 @@ Notable options:
 | `--max-prob-breach-loss` | Optional hard cap for `prob_breach_max_loss` (requires `--max-loss-pct`). |
 | `--shock-probability` | Inject rare stress events per step (0-1) to pressure-test fragility. |
 | `--shock-return` | Return applied on stress events (e.g. `-0.2` for a 20% drop). |
+| `--capital` | Optional total capital used to emit execution-ready dollar/share sizing. |
+| `--allow-fractional-shares` | Allow non-integer share sizing when `--capital` is set. |
 
 Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices. The CLI now also reports **path-risk drawdown metrics** (`max_drawdown_mean`, `max_drawdown_q95`, and probability of breaching 10%/20% drawdowns), which are more decision-useful than endpoint-only stats. When you pass multiple tickers to `cli.py`, it also emits an **equal-weight portfolio** summary so you can judge basket-level upside/downside instead of isolated symbols.
 
 The CLI now also prints a concise **Action plan** section (stance, primary pick, and avoid list) and saves the same guidance to `action_plan.md` in the output directory. This gives a decision-oriented readout rather than raw metrics only.
+When `--capital` is provided, the CLI also produces an **Execution plan** with target dollars, estimated shares, and cash drift per ticker so output maps directly to tradable orders (saved as `execution_plan.csv`).
 The allocator is now **risk-budgeted by default**: set `--portfolio-risk-budget-pct` (default `0.02`) and the tool automatically scales total exposure so the blended portfolio 95% VaR stays under your loss budget, with the remainder explicitly left in cash.
 It now also estimates **payoff asymmetry** (`avg_upside_pct`, `avg_downside_pct`, `payoff_ratio`) and a capped **Kelly fraction** signal per ticker, then uses that conviction signal to tilt ranking/allocation toward setups with stronger risk-reward geometry.
 It now supports an explicit **goal/risk contract**: set an upside target and maximum loss, then enforce probability constraints directly with guardrails (`prob_hit_target`, `prob_breach_max_loss`) so output maps to concrete decision thresholds instead of vague optimism.

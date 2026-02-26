@@ -7,6 +7,7 @@ import pytest
 from analysis import (
     apply_risk_guards,
     build_action_plan,
+    build_execution_plan,
     enforce_portfolio_risk_budget,
     rank_tickers,
     recommend_allocations,
@@ -381,3 +382,37 @@ def test_enforce_portfolio_risk_budget_keeps_weights_when_under_budget():
     )
 
     pd.testing.assert_frame_equal(constrained, allocations)
+
+
+def test_build_execution_plan_rounds_to_whole_shares_by_default():
+    allocations = pd.DataFrame(
+        {
+            "weight": {"AAPL": 0.6, "MSFT": 0.4},
+            "score": {"AAPL": 12.0, "MSFT": 9.0},
+            "value_at_risk_95_pct": {"AAPL": 0.1, "MSFT": 0.06},
+        }
+    )
+
+    plan = build_execution_plan(
+        allocations,
+        current_prices={"AAPL": 101.0, "MSFT": 50.0},
+        capital=1000.0,
+    )
+
+    assert plan.loc["AAPL", "shares"] == pytest.approx(5.0)
+    assert plan.loc["MSFT", "shares"] == pytest.approx(8.0)
+    assert plan.loc["AAPL", "cash_drift"] == pytest.approx(95.0)
+
+
+def test_build_execution_plan_supports_fractional_shares():
+    allocations = pd.DataFrame({"weight": {"AAPL": 0.5}})
+
+    plan = build_execution_plan(
+        allocations,
+        current_prices={"AAPL": 120.0},
+        capital=1000.0,
+        allow_fractional_shares=True,
+    )
+
+    assert plan.loc["AAPL", "shares"] == pytest.approx(1000.0 * 0.5 / 120.0)
+    assert plan.loc["AAPL", "cash_drift"] == pytest.approx(0.0)
