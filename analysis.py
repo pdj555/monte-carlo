@@ -77,6 +77,10 @@ def summarize_final_prices(
         summary["expected_shortfall_95"] = float(max(0.0, es_95))
         summary["value_at_risk_99"] = float(max(0.0, var_99))
         summary["expected_shortfall_99"] = float(max(0.0, es_99))
+        summary["value_at_risk_95_pct"] = float(summary["value_at_risk_95"] / current_price)
+        summary["expected_shortfall_95_pct"] = float(summary["expected_shortfall_95"] / current_price)
+        summary["value_at_risk_99_pct"] = float(summary["value_at_risk_99"] / current_price)
+        summary["expected_shortfall_99_pct"] = float(summary["expected_shortfall_99"] / current_price)
 
     return pd.Series(summary)
 
@@ -135,4 +139,44 @@ def summarize_equal_weight_portfolio(
     return summary
 
 
-__all__ = ["summarize_final_prices", "summarize_equal_weight_portfolio"]
+def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
+    """Rank tickers using a simple upside-vs-downside score.
+
+    Parameters
+    ----------
+    summaries : pandas.DataFrame
+        Summary table where rows are tickers and columns contain at least
+        ``expected_return``, ``prob_above_current`` and ``value_at_risk_95_pct``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table ordered by descending ``score`` with a lean recommendation label.
+    """
+
+    if summaries.empty:
+        return pd.DataFrame(
+            columns=["score", "expected_return", "prob_above_current", "value_at_risk_95_pct", "recommendation"]
+        )
+
+    required = {"expected_return", "prob_above_current", "value_at_risk_95_pct"}
+    missing = sorted(required - set(summaries.columns))
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(f"summaries missing required columns: {joined}")
+
+    ranking = summaries.loc[:, sorted(required)].copy()
+    ranking["score"] = (
+        ranking["expected_return"] * 100.0
+        + (ranking["prob_above_current"] - 0.5) * 40.0
+        - ranking["value_at_risk_95_pct"] * 100.0
+    )
+    ranking["recommendation"] = "WATCH"
+    ranking.loc[ranking["score"] >= 10.0, "recommendation"] = "BUY"
+    ranking.loc[ranking["score"] <= 0.0, "recommendation"] = "AVOID"
+    ranking = ranking.sort_values("score", ascending=False)
+    ranking.index.name = "ticker"
+    return ranking
+
+
+__all__ = ["rank_tickers", "summarize_final_prices", "summarize_equal_weight_portfolio"]
