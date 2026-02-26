@@ -14,6 +14,8 @@ def summarize_final_prices(
     *,
     current_price: float | None = None,
     quantiles: Sequence[float] | None = None,
+    target_return_pct: float | None = None,
+    max_loss_pct: float | None = None,
 ) -> pd.Series:
     """Return summary statistics for the final simulated prices.
 
@@ -27,6 +29,13 @@ def summarize_final_prices(
         return, win/loss probabilities and downside risk metrics (VaR/CVaR).
     quantiles : sequence of float, optional
         Additional quantiles to report. Values must be between ``0`` and ``1``.
+    target_return_pct : float, optional
+        Decision target expressed as simple return from ``current_price``. When
+        provided, include probability of finishing at or above target.
+    max_loss_pct : float, optional
+        Maximum acceptable loss expressed as a positive fraction from
+        ``current_price``. When provided, include probability of breaching this
+        loss threshold.
 
     Returns
     -------
@@ -99,6 +108,19 @@ def summarize_final_prices(
         summary["expected_shortfall_95_pct"] = float(summary["expected_shortfall_95"] / current_price)
         summary["value_at_risk_99_pct"] = float(summary["value_at_risk_99"] / current_price)
         summary["expected_shortfall_99_pct"] = float(summary["expected_shortfall_99"] / current_price)
+
+        if target_return_pct is not None:
+            target_return_pct = float(target_return_pct)
+            summary["target_return_pct"] = target_return_pct
+            realized_returns = final_prices / current_price - 1.0
+            summary["prob_hit_target"] = float((realized_returns >= target_return_pct).mean())
+
+        if max_loss_pct is not None:
+            if max_loss_pct < 0:
+                raise ValueError("max_loss_pct must be non-negative when provided")
+            loss_floor = current_price * (1.0 - float(max_loss_pct))
+            summary["max_loss_pct"] = float(max_loss_pct)
+            summary["prob_breach_max_loss"] = float((final_prices <= loss_floor).mean())
 
     if len(df.index) > 1:
         running_peaks = df.cummax()
@@ -203,6 +225,10 @@ def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
         ranking["kelly_fraction"] = summaries["kelly_fraction"].clip(lower=0.0, upper=1.0)
     if "max_drawdown_q95" in summaries.columns:
         ranking["max_drawdown_q95"] = summaries["max_drawdown_q95"]
+    if "prob_hit_target" in summaries.columns:
+        ranking["prob_hit_target"] = summaries["prob_hit_target"]
+    if "prob_breach_max_loss" in summaries.columns:
+        ranking["prob_breach_max_loss"] = summaries["prob_breach_max_loss"]
     downside_col = "expected_shortfall_95_pct"
     if downside_col in summaries.columns:
         ranking[downside_col] = summaries[downside_col]
@@ -321,6 +347,8 @@ def apply_risk_guards(
     min_prob_above_current: float = 0.5,
     max_value_at_risk_95_pct: float = 0.25,
     max_drawdown_q95: float | None = None,
+    min_prob_hit_target: float | None = None,
+    max_prob_breach_loss: float | None = None,
 ) -> pd.DataFrame:
     """Apply hard risk/reward filters to ranking output.
 
@@ -344,6 +372,10 @@ def apply_risk_guards(
 
     if not 0 <= min_prob_above_current <= 1:
         raise ValueError("min_prob_above_current must be between 0 and 1")
+    if min_prob_hit_target is not None and not 0 <= min_prob_hit_target <= 1:
+        raise ValueError("min_prob_hit_target must be between 0 and 1 when provided")
+    if max_prob_breach_loss is not None and not 0 <= max_prob_breach_loss <= 1:
+        raise ValueError("max_prob_breach_loss must be between 0 and 1 when provided")
     if max_value_at_risk_95_pct < 0:
         raise ValueError("max_value_at_risk_95_pct must be non-negative")
     if max_drawdown_q95 is not None and max_drawdown_q95 < 0:
@@ -358,6 +390,16 @@ def apply_risk_guards(
     fail_drawdown = (
         guarded["max_drawdown_q95"] > max_drawdown_q95
         if max_drawdown_q95 is not None and "max_drawdown_q95" in guarded.columns
+        else pd.Series(False, index=guarded.index)
+    )
+    fail_target = (
+        guarded["prob_hit_target"] < min_prob_hit_target
+        if min_prob_hit_target is not None and "prob_hit_target" in guarded.columns
+        else pd.Series(False, index=guarded.index)
+    )
+    fail_loss_breach = (
+        guarded["prob_breach_max_loss"] > max_prob_breach_loss
+        if max_prob_breach_loss is not None and "prob_breach_max_loss" in guarded.columns
         else pd.Series(False, index=guarded.index)
     )
 
@@ -380,10 +422,18 @@ def apply_risk_guards(
             ticker_reasons.append(
                 f"max_drawdown_q95>{max_drawdown_q95:.1%}"
             )
+        if bool(fail_target.loc[ticker]):
+            ticker_reasons.append(
+                f"prob_hit_target<{min_prob_hit_target:.0%}"
+            )
+        if bool(fail_loss_breach.loc[ticker]):
+            ticker_reasons.append(
+                f"prob_breach_max_loss>{max_prob_breach_loss:.0%}"
+            )
         reasons.append("; ".join(ticker_reasons))
 
     guarded["guardrail_reasons"] = reasons
-    failed_any = fail_expected | fail_prob | fail_var | fail_drawdown
+    failed_any = fail_expected | fail_prob | fail_var | fail_drawdown | fail_target | fail_loss_breach
     guarded.loc[failed_any, "recommendation"] = "AVOID"
     return guarded
 

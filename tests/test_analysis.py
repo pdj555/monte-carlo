@@ -44,6 +44,29 @@ def test_summarize_final_prices_reports_key_metrics():
     assert 0.0 <= summary["kelly_fraction"] <= 1.0
 
 
+def test_summarize_final_prices_reports_target_and_loss_probabilities():
+    df = pd.DataFrame(
+        {
+            0: [100.0, 110.0],
+            1: [100.0, 120.0],
+            2: [100.0, 95.0],
+            3: [100.0, 85.0],
+        }
+    )
+
+    summary = summarize_final_prices(
+        df,
+        current_price=100.0,
+        target_return_pct=0.1,
+        max_loss_pct=0.1,
+    )
+
+    assert summary["target_return_pct"] == pytest.approx(0.1)
+    assert summary["max_loss_pct"] == pytest.approx(0.1)
+    assert summary["prob_hit_target"] == pytest.approx(0.5)
+    assert summary["prob_breach_max_loss"] == pytest.approx(0.25)
+
+
 def test_summarize_final_prices_requires_data():
     with pytest.raises(ValueError):
         summarize_final_prices(pd.DataFrame())
@@ -288,3 +311,28 @@ def test_apply_risk_guards_enforces_drawdown_cap_when_configured():
     assert guarded.loc["AAPL", "recommendation"] == "BUY"
     assert guarded.loc["TSLA", "recommendation"] == "AVOID"
     assert "max_drawdown_q95>30.0%" in guarded.loc["TSLA", "guardrail_reasons"]
+
+
+def test_apply_risk_guards_can_enforce_target_and_loss_breach_probabilities():
+    rankings = pd.DataFrame(
+        {
+            "score": {"AAPL": 12.0, "TSLA": 13.0},
+            "expected_return": {"AAPL": 0.12, "TSLA": 0.14},
+            "prob_above_current": {"AAPL": 0.62, "TSLA": 0.61},
+            "value_at_risk_95_pct": {"AAPL": 0.08, "TSLA": 0.09},
+            "prob_hit_target": {"AAPL": 0.42, "TSLA": 0.30},
+            "prob_breach_max_loss": {"AAPL": 0.16, "TSLA": 0.28},
+            "recommendation": {"AAPL": "BUY", "TSLA": "BUY"},
+        }
+    )
+
+    guarded = apply_risk_guards(
+        rankings,
+        min_prob_hit_target=0.4,
+        max_prob_breach_loss=0.2,
+    )
+
+    assert guarded.loc["AAPL", "recommendation"] == "BUY"
+    assert guarded.loc["TSLA", "recommendation"] == "AVOID"
+    assert "prob_hit_target<40%" in guarded.loc["TSLA", "guardrail_reasons"]
+    assert "prob_breach_max_loss>20%" in guarded.loc["TSLA", "guardrail_reasons"]
