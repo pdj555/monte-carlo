@@ -35,6 +35,8 @@ def test_summarize_final_prices_reports_key_metrics():
     assert summary["q10"] <= summary["q90"]
     assert summary["value_at_risk_99"] >= summary["value_at_risk_95"]
     assert summary["expected_shortfall_95"] >= summary["value_at_risk_95"]
+    assert 0.0 <= summary["max_drawdown_q95"] <= 1.0
+    assert 0.0 <= summary["prob_drawdown_20_pct"] <= 1.0
 
 
 def test_summarize_final_prices_requires_data():
@@ -217,6 +219,7 @@ def test_apply_risk_guards_marks_failures_as_avoid():
             "expected_return": {"AAPL": 0.12, "TSLA": 0.09},
             "prob_above_current": {"AAPL": 0.64, "TSLA": 0.49},
             "value_at_risk_95_pct": {"AAPL": 0.09, "TSLA": 0.31},
+            "max_drawdown_q95": {"AAPL": 0.12, "TSLA": 0.44},
             "recommendation": {"AAPL": "BUY", "TSLA": "BUY"},
         }
     )
@@ -231,3 +234,22 @@ def test_apply_risk_guards_marks_failures_as_avoid():
     assert guarded.loc["AAPL", "recommendation"] == "BUY"
     assert guarded.loc["TSLA", "recommendation"] == "AVOID"
     assert "prob_above_current<55%" in guarded.loc["TSLA", "guardrail_reasons"]
+
+
+def test_apply_risk_guards_enforces_drawdown_cap_when_configured():
+    rankings = pd.DataFrame(
+        {
+            "score": {"AAPL": 13.0, "TSLA": 14.0},
+            "expected_return": {"AAPL": 0.13, "TSLA": 0.2},
+            "prob_above_current": {"AAPL": 0.63, "TSLA": 0.61},
+            "value_at_risk_95_pct": {"AAPL": 0.08, "TSLA": 0.11},
+            "max_drawdown_q95": {"AAPL": 0.25, "TSLA": 0.42},
+            "recommendation": {"AAPL": "BUY", "TSLA": "BUY"},
+        }
+    )
+
+    guarded = apply_risk_guards(rankings, max_drawdown_q95=0.3)
+
+    assert guarded.loc["AAPL", "recommendation"] == "BUY"
+    assert guarded.loc["TSLA", "recommendation"] == "AVOID"
+    assert "max_drawdown_q95>30.0%" in guarded.loc["TSLA", "guardrail_reasons"]
