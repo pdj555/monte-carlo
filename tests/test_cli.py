@@ -432,3 +432,35 @@ def test_cli_generates_execution_plan_when_capital_is_provided(tmp_path):
     first = next(iter(result["report"]["execution_plan"].values()))
     assert "shares" in first
     assert (output_dir / "execution_plan.csv").exists()
+
+
+def test_cli_accepts_block_bootstrap_for_historical_model(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.2)
+
+    result = run(
+        parse_args(
+            [
+                "--tickers",
+                "AAPL",
+                "--days",
+                "20",
+                "--scenarios",
+                "120",
+                "--seed",
+                "123",
+                "--no-show",
+                "--no-plots",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+                "--model",
+                "historical",
+                "--block-size",
+                "5",
+            ]
+        )
+    )
+
+    assert result["report"]["results"]["AAPL"]["summary"]["mean"] > 0
