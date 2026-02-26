@@ -61,6 +61,24 @@ def summarize_final_prices(
         summary["prob_above_current"] = float((final_prices > current_price).mean())
         summary["prob_below_current"] = float((final_prices < current_price).mean())
 
+        simple_returns = final_prices / current_price - 1.0
+        wins = simple_returns[simple_returns > 0]
+        losses = simple_returns[simple_returns < 0]
+        avg_win = float(wins.mean()) if not wins.empty else 0.0
+        avg_loss = float((-losses).mean()) if not losses.empty else 0.0
+        payoff_ratio = avg_win / avg_loss if avg_loss > 0 else 10.0
+        kelly_fraction = 0.0
+        if avg_loss > 0 and avg_win > 0:
+            p_win = float((simple_returns > 0).mean())
+            p_loss = 1.0 - p_win
+            kelly_fraction = p_win - (p_loss / payoff_ratio)
+            kelly_fraction = float(min(max(kelly_fraction, 0.0), 1.0))
+
+        summary["avg_upside_pct"] = avg_win
+        summary["avg_downside_pct"] = avg_loss
+        summary["payoff_ratio"] = float(payoff_ratio)
+        summary["kelly_fraction"] = float(kelly_fraction)
+
         q05 = float(final_prices.quantile(0.05))
         q01 = float(final_prices.quantile(0.01))
 
@@ -159,7 +177,9 @@ def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
         Summary table where rows are tickers and columns contain at least
         ``expected_return``, ``prob_above_current`` and ``value_at_risk_95_pct``.
         When available, ``expected_shortfall_95_pct`` is used as the downside
-        penalty because it captures tail severity better than VaR.
+        penalty because it captures tail severity better than VaR. When
+        available, ``kelly_fraction`` boosts ranking for setups with stronger
+        asymmetric payoff.
 
     Returns
     -------
@@ -179,6 +199,8 @@ def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"summaries missing required columns: {joined}")
 
     ranking = summaries.loc[:, sorted(required)].copy()
+    if "kelly_fraction" in summaries.columns:
+        ranking["kelly_fraction"] = summaries["kelly_fraction"].clip(lower=0.0, upper=1.0)
     if "max_drawdown_q95" in summaries.columns:
         ranking["max_drawdown_q95"] = summaries["max_drawdown_q95"]
     downside_col = "expected_shortfall_95_pct"
@@ -200,6 +222,8 @@ def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
         - downside_penalty * 100.0
         - drawdown_penalty * 35.0
     )
+    if "kelly_fraction" in ranking.columns:
+        ranking["score"] += ranking["kelly_fraction"] * 20.0
     ranking["recommendation"] = "WATCH"
     ranking.loc[ranking["score"] >= 10.0, "recommendation"] = "BUY"
     ranking.loc[ranking["score"] <= 0.0, "recommendation"] = "AVOID"
@@ -255,6 +279,8 @@ def recommend_allocations(
     )
 
     signal = eligible["score"].clip(lower=0.0)
+    if "kelly_fraction" in eligible.columns:
+        signal = signal * (0.5 + eligible["kelly_fraction"].clip(lower=0.0, upper=1.0))
     risk_scale = 1.0 / (1.0 + eligible[downside_col].clip(lower=0.0))
     raw = signal * risk_scale
 
