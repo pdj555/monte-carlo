@@ -64,10 +64,20 @@ Notable options:
 | `--offline-path` | Directory or CSV file used when offline data is required. |
 | `--offline-only` | Never hit the network—expect local CSV data. |
 | `--strict` | Exit non-zero if any ticker fails. |
+| `--min-expected-return` | Hard floor for expected return (below this becomes `AVOID`). |
+| `--min-prob-up` | Minimum probability of finishing above current price. |
+| `--max-var-95-pct` | Maximum tolerated 95% VaR (as % of current price). |
 
 Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices. When you pass multiple tickers to `cli.py`, it now also emits an **equal-weight portfolio** summary so you can judge basket-level upside/downside instead of isolated symbols.
 
 The CLI now also prints a concise **Action plan** section (stance, primary pick, and avoid list) and saves the same guidance to `action_plan.md` in the output directory. This gives a decision-oriented readout rather than raw metrics only.
+
+For decisive execution, use guardrails to enforce your risk policy directly in ranking/allocation output, e.g.:
+
+```bash
+python cli.py --tickers AAPL,MSFT,TSLA --model gbm --days 252 --scenarios 5000 \
+  --min-expected-return 0.08 --min-prob-up 0.55 --max-var-95-pct 0.18 --no-show
+```
 
 ## Offline Data
 

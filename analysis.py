@@ -268,7 +268,70 @@ def recommend_allocations(
     return allocation
 
 
+def apply_risk_guards(
+    rankings: pd.DataFrame,
+    *,
+    min_expected_return: float = 0.0,
+    min_prob_above_current: float = 0.5,
+    max_value_at_risk_95_pct: float = 0.25,
+) -> pd.DataFrame:
+    """Apply hard risk/reward filters to ranking output.
+
+    This function turns soft ranking into explicit go/no-go gates. Any ticker
+    failing one or more constraints is marked ``AVOID`` regardless of score.
+    """
+
+    if rankings.empty:
+        return rankings.copy()
+
+    required = {
+        "expected_return",
+        "prob_above_current",
+        "value_at_risk_95_pct",
+        "recommendation",
+    }
+    missing = sorted(required - set(rankings.columns))
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(f"rankings missing required columns: {joined}")
+
+    if not 0 <= min_prob_above_current <= 1:
+        raise ValueError("min_prob_above_current must be between 0 and 1")
+    if max_value_at_risk_95_pct < 0:
+        raise ValueError("max_value_at_risk_95_pct must be non-negative")
+
+    guarded = rankings.copy()
+    guarded["guardrail_reasons"] = ""
+
+    fail_expected = guarded["expected_return"] < min_expected_return
+    fail_prob = guarded["prob_above_current"] < min_prob_above_current
+    fail_var = guarded["value_at_risk_95_pct"] > max_value_at_risk_95_pct
+
+    reasons = []
+    for ticker in guarded.index:
+        ticker_reasons: list[str] = []
+        if bool(fail_expected.loc[ticker]):
+            ticker_reasons.append(
+                f"expected_return<{min_expected_return:.1%}"
+            )
+        if bool(fail_prob.loc[ticker]):
+            ticker_reasons.append(
+                f"prob_above_current<{min_prob_above_current:.0%}"
+            )
+        if bool(fail_var.loc[ticker]):
+            ticker_reasons.append(
+                f"value_at_risk_95_pct>{max_value_at_risk_95_pct:.1%}"
+            )
+        reasons.append("; ".join(ticker_reasons))
+
+    guarded["guardrail_reasons"] = reasons
+    failed_any = fail_expected | fail_prob | fail_var
+    guarded.loc[failed_any, "recommendation"] = "AVOID"
+    return guarded
+
+
 __all__ = [
+    "apply_risk_guards",
     "build_action_plan",
     "rank_tickers",
     "recommend_allocations",
