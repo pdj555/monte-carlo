@@ -101,3 +101,19 @@ def test_simulate_gbm_rejects_invalid_shock_probability():
             scenarios=10,
             shock_probability=1.5,
         )
+
+
+def test_simulate_prices_block_bootstrap_is_reproducible():
+    returns = pd.Series([0.01, -0.02, 0.03, -0.01, 0.02])
+
+    sims_a = simulate_prices(returns, days=12, scenarios=8, seed=42, block_size=3)
+    sims_b = simulate_prices(returns, days=12, scenarios=8, seed=42, block_size=3)
+
+    assert sims_a.equals(sims_b)
+    assert sims_a.shape == (12, 8)
+
+
+def test_simulate_prices_rejects_invalid_block_size():
+    returns = pd.Series([0.01, -0.02, 0.015])
+    with pytest.raises(ValueError):
+        simulate_prices(returns, days=10, scenarios=5, block_size=0)

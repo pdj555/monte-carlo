@@ -64,6 +64,7 @@ def simulate_prices(
     current_price: Optional[float | pd.Series] = None,
     shock_probability: float = 0.0,
     shock_return: float = -0.15,
+    block_size: int = 1,
 ) -> pd.DataFrame:
     """Vectorized Monte Carlo simulation of future prices using historical data.
 
@@ -87,6 +88,10 @@ def simulate_prices(
     current_price : float or pandas.Series, optional
         Starting price for the simulated paths. If omitted the output is
         normalised to start at ``1.0``.
+    block_size : int, optional
+        Number of consecutive return observations sampled together during
+        bootstrap. Use values above ``1`` to preserve short-run serial
+        dependence and volatility clustering.
 
     Returns
     -------
@@ -105,6 +110,8 @@ def simulate_prices(
         raise ValueError("days and scenarios must be positive integers")
     if dt <= 0:
         raise ValueError("dt must be positive")
+    if block_size <= 0:
+        raise ValueError("block_size must be a positive integer")
     _validate_shock_inputs(shock_probability, shock_return)
     if returns.empty:
         raise ValueError("returns must contain at least one observation")
@@ -120,8 +127,15 @@ def simulate_prices(
         raise ValueError("returns must be greater than -1.0")
 
     rng = np.random.default_rng(seed)
-    sample_indices = rng.integers(0, values.shape[0], size=(days, scenarios))
-    sampled_returns = values[sample_indices]
+    if block_size == 1:
+        sample_indices = rng.integers(0, values.shape[0], size=(days, scenarios))
+        sampled_returns = values[sample_indices]
+    else:
+        blocks_needed = int(np.ceil(days / block_size))
+        block_starts = rng.integers(0, values.shape[0], size=(blocks_needed, scenarios))
+        offsets = np.arange(block_size, dtype=int)[:, None, None]
+        block_indices = (block_starts[None, :, :] + offsets) % values.shape[0]
+        sampled_returns = values[block_indices].transpose(1, 0, 2).reshape(-1, scenarios)[:days, :]
 
     if shock_probability > 0.0:
         shock_mask = rng.random(size=(days, scenarios)) < shock_probability

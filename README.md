@@ -56,6 +56,7 @@ Notable options:
 | ---- | ----------- |
 | `--tickers` | Comma separated list of tickers to simulate. |
 | `--model` | `historical` (default) or `gbm` for geometric Brownian motion. |
+| `--block-size` | Consecutive return block length for historical bootstrap (use `>1` for regime-aware simulations). |
 | `--seed` | Fix the random seed to obtain reproducible paths. |
 | `--output` | Directory where distribution and path plots are saved. |
 | `--max-paths` | Cap how many scenarios are drawn in the path plot (0 = all). |
@@ -92,6 +93,13 @@ For decisive execution, use guardrails to enforce your risk policy directly in r
 ```bash
 python cli.py --tickers AAPL,MSFT,TSLA --model gbm --days 252 --scenarios 5000 \
   --min-expected-return 0.08 --min-prob-up 0.55 --max-var-95-pct 0.18 --no-show
+```
+
+For more realistic historical-mode paths, use **block bootstrap** to preserve short-term volatility regimes instead of shuffling each day independently:
+
+```bash
+python cli.py --tickers AAPL,MSFT --model historical --block-size 5 \
+  --days 252 --scenarios 5000 --offline-only --offline-path sample_data --no-show
 ```
 
 ## Offline Data
