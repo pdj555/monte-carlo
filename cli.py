@@ -121,6 +121,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Time increment for each simulation step (in trading days).",
     )
     parser.add_argument(
+        "--block-size",
+        type=_positive_int,
+        default=1,
+        help=(
+            "Bootstrap block size for historical model (1 = IID resampling). "
+            "Use >1 to preserve short-term market regimes."
+        ),
+    )
+    parser.add_argument(
         "--shock-probability",
         type=float,
         default=0.0,
@@ -345,6 +354,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.model == "gbm" and int(args.block_size) != 1:
+        LOGGER.warning("--block-size only applies to --model historical; ignoring for gbm")
+
     if not args.show and not args.no_plots:
         try:
             plt.switch_backend("Agg")
@@ -400,6 +412,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 current_price=current_price,
                 shock_probability=float(args.shock_probability),
                 shock_return=float(args.shock_return),
+                block_size=int(args.block_size),
             )
         else:
             mu, sigma = estimate_gbm_parameters(returns)
