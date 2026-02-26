@@ -77,6 +77,36 @@ def test_rank_tickers_orders_by_score():
     assert ranked.loc["TSLA", "recommendation"] == "AVOID"
 
 
+def test_rank_tickers_prefers_expected_shortfall_when_available():
+    summaries = pd.DataFrame(
+        {
+            "expected_return": {"AAPL": 0.12, "MSFT": 0.12},
+            "prob_above_current": {"AAPL": 0.6, "MSFT": 0.6},
+            "value_at_risk_95_pct": {"AAPL": 0.05, "MSFT": 0.09},
+            "expected_shortfall_95_pct": {"AAPL": 0.15, "MSFT": 0.06},
+        }
+    )
+
+    ranked = rank_tickers(summaries)
+
+    assert list(ranked.index) == ["MSFT", "AAPL"]
+
+
+def test_recommend_allocations_uses_expected_shortfall_when_available():
+    rankings = pd.DataFrame(
+        {
+            "score": {"AAPL": 10.0, "MSFT": 10.0},
+            "value_at_risk_95_pct": {"AAPL": 0.05, "MSFT": 0.2},
+            "expected_shortfall_95_pct": {"AAPL": 0.25, "MSFT": 0.05},
+            "recommendation": {"AAPL": "BUY", "MSFT": "BUY"},
+        }
+    )
+
+    allocation = recommend_allocations(rankings)
+
+    assert allocation.loc["MSFT", "weight"] > allocation.loc["AAPL", "weight"]
+
+
 def test_recommend_allocations_outputs_normalized_weights():
     rankings = pd.DataFrame(
         {
