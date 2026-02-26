@@ -230,6 +230,36 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--target-return-pct",
+        type=float,
+        default=None,
+        help=(
+            "Optional return target as a fraction of current price "
+            "(e.g. 0.1 = +10%%); enables prob_hit_target metrics."
+        ),
+    )
+    parser.add_argument(
+        "--max-loss-pct",
+        type=float,
+        default=None,
+        help=(
+            "Optional maximum acceptable loss as a fraction of current price "
+            "(e.g. 0.12 = -12%%); enables prob_breach_max_loss metrics."
+        ),
+    )
+    parser.add_argument(
+        "--min-prob-hit-target",
+        type=float,
+        default=None,
+        help="Optional guardrail: minimum probability of reaching --target-return-pct (0-1).",
+    )
+    parser.add_argument(
+        "--max-prob-breach-loss",
+        type=float,
+        default=None,
+        help="Optional guardrail: maximum allowed probability of breaching --max-loss-pct (0-1).",
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="Return a non-zero exit code if any ticker fails.",
@@ -252,6 +282,16 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         parser.error("--shock-probability must be between 0 and 1")
     if float(args.shock_return) <= -1.0:
         parser.error("--shock-return must be greater than -1.0")
+    if args.max_loss_pct is not None and float(args.max_loss_pct) < 0:
+        parser.error("--max-loss-pct must be non-negative")
+    if args.min_prob_hit_target is not None and not 0.0 <= float(args.min_prob_hit_target) <= 1.0:
+        parser.error("--min-prob-hit-target must be between 0 and 1")
+    if args.max_prob_breach_loss is not None and not 0.0 <= float(args.max_prob_breach_loss) <= 1.0:
+        parser.error("--max-prob-breach-loss must be between 0 and 1")
+    if args.min_prob_hit_target is not None and args.target_return_pct is None:
+        parser.error("--min-prob-hit-target requires --target-return-pct")
+    if args.max_prob_breach_loss is not None and args.max_loss_pct is None:
+        parser.error("--max-prob-breach-loss requires --max-loss-pct")
     return args
 
 
@@ -358,7 +398,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         combined_frames.append(sims)
 
         summary = summarize_final_prices(
-            sims.xs(ticker, axis=1, level=0), current_price=current_price
+            sims.xs(ticker, axis=1, level=0),
+            current_price=current_price,
+            target_return_pct=(
+                None if args.target_return_pct is None else float(args.target_return_pct)
+            ),
+            max_loss_pct=(None if args.max_loss_pct is None else float(args.max_loss_pct)),
         )
         summaries[ticker] = summary
 
@@ -436,6 +481,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 None
                 if args.max_drawdown_q95_pct is None
                 else float(args.max_drawdown_q95_pct)
+            ),
+            min_prob_hit_target=(
+                None if args.min_prob_hit_target is None else float(args.min_prob_hit_target)
+            ),
+            max_prob_breach_loss=(
+                None
+                if args.max_prob_breach_loss is None
+                else float(args.max_prob_breach_loss)
             ),
         )
         if not rankings.empty

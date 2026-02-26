@@ -68,6 +68,10 @@ Notable options:
 | `--min-prob-up` | Minimum probability of finishing above current price. |
 | `--max-var-95-pct` | Maximum tolerated 95% VaR (as % of current price). |
 | `--max-drawdown-q95-pct` | Optional cap on path max drawdown (95th percentile) to hard-filter fragile setups. |
+| `--target-return-pct` | Optional upside target (as return %) and report probability of hitting it (`prob_hit_target`). |
+| `--max-loss-pct` | Optional maximum acceptable loss and report breach probability (`prob_breach_max_loss`). |
+| `--min-prob-hit-target` | Optional hard floor for `prob_hit_target` (requires `--target-return-pct`). |
+| `--max-prob-breach-loss` | Optional hard cap for `prob_breach_max_loss` (requires `--max-loss-pct`). |
 | `--shock-probability` | Inject rare stress events per step (0-1) to pressure-test fragility. |
 | `--shock-return` | Return applied on stress events (e.g. `-0.2` for a 20% drop). |
 
@@ -75,6 +79,7 @@ Both the CLI and the legacy script output a statistical summary including mean, 
 
 The CLI now also prints a concise **Action plan** section (stance, primary pick, and avoid list) and saves the same guidance to `action_plan.md` in the output directory. This gives a decision-oriented readout rather than raw metrics only.
 It now also estimates **payoff asymmetry** (`avg_upside_pct`, `avg_downside_pct`, `payoff_ratio`) and a capped **Kelly fraction** signal per ticker, then uses that conviction signal to tilt ranking/allocation toward setups with stronger risk-reward geometry.
+It now supports an explicit **goal/risk contract**: set an upside target and maximum loss, then enforce probability constraints directly with guardrails (`prob_hit_target`, `prob_breach_max_loss`) so output maps to concrete decision thresholds instead of vague optimism.
 
 For decisive execution, use guardrails to enforce your risk policy directly in ranking/allocation output, e.g.:
 
