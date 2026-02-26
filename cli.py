@@ -16,6 +16,7 @@ import pandas as pd
 
 from ai import OpenAIConfigurationError, OpenAIRequestError, generate_ai_summary
 from analysis import (
+    apply_risk_guards,
     build_action_plan,
     rank_tickers,
     recommend_allocations,
@@ -185,6 +186,24 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         default="gpt-4o-mini",
         help="OpenAI model name used when --ai-summary is enabled.",
+    )
+    parser.add_argument(
+        "--min-expected-return",
+        type=float,
+        default=0.0,
+        help="Minimum expected return required to keep a ticker investable (e.g. 0.05 = 5%%).",
+    )
+    parser.add_argument(
+        "--min-prob-up",
+        type=float,
+        default=0.5,
+        help="Minimum probability that final price exceeds current price (0-1).",
+    )
+    parser.add_argument(
+        "--max-var-95-pct",
+        type=float,
+        default=0.25,
+        help="Maximum allowed 95%% VaR as a percent of current price (e.g. 0.20 = 20%%).",
     )
     parser.add_argument(
         "--strict",
@@ -374,12 +393,32 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     summary_df = pd.DataFrame(summaries).T if summaries else pd.DataFrame()
     rankings = rank_tickers(summary_df) if not summary_df.empty else pd.DataFrame()
+    rankings = (
+        apply_risk_guards(
+            rankings,
+            min_expected_return=float(args.min_expected_return),
+            min_prob_above_current=float(args.min_prob_up),
+            max_value_at_risk_95_pct=float(args.max_var_95_pct),
+        )
+        if not rankings.empty
+        else rankings
+    )
     allocations = recommend_allocations(rankings) if not rankings.empty else pd.DataFrame()
     action_plan = build_action_plan(rankings, allocations)
 
     if not rankings.empty:
         print("\nTicker ranking")
-        display = rankings.loc[:, ["score", "expected_return", "prob_above_current", "value_at_risk_95_pct", "recommendation"]]
+        display = rankings.loc[
+            :,
+            [
+                "score",
+                "expected_return",
+                "prob_above_current",
+                "value_at_risk_95_pct",
+                "recommendation",
+                "guardrail_reasons",
+            ],
+        ]
         print(display.to_string(float_format=lambda v: f"{v:0.3f}"))
 
     if not allocations.empty:
