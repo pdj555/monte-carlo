@@ -402,6 +402,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
     if action_plan["avoid_list"]:
         print(f"- Avoid: {', '.join(action_plan['avoid_list'])}")
+    if action_plan.get("cash_weight", 0.0) > 0:
+        print(f"- Cash buffer: {action_plan['cash_weight']:.1%}")
 
     report: dict[str, object] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -451,6 +453,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 )
             if action_plan["avoid_list"]:
                 handle.write(f"- **Avoid:** {', '.join(action_plan['avoid_list'])}\n")
+            if action_plan.get("cash_weight", 0.0) > 0:
+                handle.write(f"- **Cash buffer:** {action_plan['cash_weight']:.1%}\n")
 
         if args.save_simulations and not combined.empty:
             combined.to_csv(output_dir / "simulations.csv.gz", compression="gzip")
