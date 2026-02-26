@@ -18,6 +18,7 @@ from ai import OpenAIConfigurationError, OpenAIRequestError, generate_ai_summary
 from analysis import (
     apply_risk_guards,
     build_action_plan,
+    build_execution_plan,
     rank_tickers,
     recommend_allocations,
     summarize_equal_weight_portfolio,
@@ -270,6 +271,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional guardrail: maximum allowed probability of breaching --max-loss-pct (0-1).",
     )
     parser.add_argument(
+        "--capital",
+        type=_positive_float,
+        default=None,
+        help="Optional portfolio capital used to produce executable dollar/share sizing.",
+    )
+    parser.add_argument(
+        "--allow-fractional-shares",
+        action="store_true",
+        help="Allow fractional shares when --capital is set.",
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="Return a non-zero exit code if any ticker fails.",
@@ -514,6 +526,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             max_portfolio_var_95_pct=float(args.portfolio_risk_budget_pct),
         )
     action_plan = build_action_plan(rankings, allocations)
+    execution_plan = pd.DataFrame()
+    if args.capital is not None and not allocations.empty:
+        execution_plan = build_execution_plan(
+            allocations,
+            current_prices=current_prices,
+            capital=float(args.capital),
+            allow_fractional_shares=bool(args.allow_fractional_shares),
+        )
 
     if not rankings.empty:
         print("\nTicker ranking")
@@ -571,6 +591,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "portfolio_summary": (portfolio_summary.to_dict() if portfolio_summary is not None else None),
         "rankings": rankings.to_dict(orient="index") if not rankings.empty else {},
         "allocations": allocations.to_dict(orient="index") if not allocations.empty else {},
+        "execution_plan": execution_plan.to_dict(orient="index") if not execution_plan.empty else {},
         "portfolio_risk_budget_pct": float(args.portfolio_risk_budget_pct),
         "action_plan": action_plan,
         "errors": errors,
@@ -590,6 +611,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if not allocations.empty:
             allocations.to_csv(output_dir / "allocations.csv", float_format="%.6g")
 
+        if not execution_plan.empty:
+            execution_plan.to_csv(output_dir / "execution_plan.csv", float_format="%.6g")
+
         with (output_dir / "action_plan.md").open("w", encoding="utf-8") as handle:
             handle.write(f"# Action Plan\n\n")
             handle.write(f"- **Stance:** {action_plan['stance']}\n")
@@ -605,6 +629,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 handle.write(f"- **Avoid:** {', '.join(action_plan['avoid_list'])}\n")
             if action_plan.get("cash_weight", 0.0) > 0:
                 handle.write(f"- **Cash buffer:** {action_plan['cash_weight']:.1%}\n")
+
+            if not execution_plan.empty:
+                handle.write("\n## Execution Plan\n\n")
+                handle.write("| Ticker | Weight | Price | Target $ | Shares | Est. Cost | Cash Drift |\n")
+                handle.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n")
+                for ticker, row in execution_plan.iterrows():
+                    handle.write(
+                        f"| {ticker} | {row['weight']:.1%} | {row['price']:.2f} | {row['target_dollars']:.2f} | {row['shares']:.4f} | {row['est_cost']:.2f} | {row['cash_drift']:.2f} |\n"
+                    )
 
         if args.save_simulations and not combined.empty:
             combined.to_csv(output_dir / "simulations.csv.gz", compression="gzip")
