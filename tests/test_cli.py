@@ -55,6 +55,9 @@ def test_cli_runs_multi_ticker(tmp_path):
     assert (output_dir / "MSFT_paths.png").exists()
     assert set(combined.columns.get_level_values(0)) == {"AAPL", "MSFT"}
 
+    assert result["report"]["portfolio_summary"] is not None
+    assert result["report"]["portfolio_summary"]["component_count"] == 2.0
+
 
 def test_cli_main_respects_strict_mode(tmp_path):
     data_dir = tmp_path / "data"

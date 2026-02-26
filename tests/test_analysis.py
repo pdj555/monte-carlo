@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from analysis import summarize_final_prices
+from analysis import summarize_equal_weight_portfolio, summarize_final_prices
 
 
 def test_summarize_final_prices_reports_key_metrics():
@@ -33,3 +33,24 @@ def test_summarize_final_prices_reports_key_metrics():
 def test_summarize_final_prices_requires_data():
     with pytest.raises(ValueError):
         summarize_final_prices(pd.DataFrame())
+
+
+def test_summarize_equal_weight_portfolio_combines_tickers():
+    sims = pd.DataFrame(
+        {
+            ("AAPL", 0): [100.0, 110.0],
+            ("AAPL", 1): [100.0, 120.0],
+            ("MSFT", 0): [50.0, 55.0],
+            ("MSFT", 1): [50.0, 50.0],
+        }
+    )
+    sims.columns = pd.MultiIndex.from_tuples(sims.columns, names=["ticker", "scenario"])
+
+    summary = summarize_equal_weight_portfolio(
+        sims,
+        current_prices={"AAPL": 100.0, "MSFT": 50.0},
+    )
+
+    assert summary["component_count"] == 2.0
+    assert summary["mean"] == pytest.approx(1.1)
+    assert summary["expected_return"] == pytest.approx(0.1)
