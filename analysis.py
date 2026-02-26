@@ -82,6 +82,17 @@ def summarize_final_prices(
         summary["value_at_risk_99_pct"] = float(summary["value_at_risk_99"] / current_price)
         summary["expected_shortfall_99_pct"] = float(summary["expected_shortfall_99"] / current_price)
 
+    if len(df.index) > 1:
+        running_peaks = df.cummax()
+        drawdown = 1.0 - df.div(running_peaks)
+        max_drawdown = drawdown.max(axis=0)
+
+        summary["max_drawdown_mean"] = float(max_drawdown.mean())
+        summary["max_drawdown_median"] = float(max_drawdown.median())
+        summary["max_drawdown_q95"] = float(max_drawdown.quantile(0.95))
+        summary["prob_drawdown_10_pct"] = float((max_drawdown >= 0.10).mean())
+        summary["prob_drawdown_20_pct"] = float((max_drawdown >= 0.20).mean())
+
     return pd.Series(summary)
 
 
@@ -168,6 +179,8 @@ def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"summaries missing required columns: {joined}")
 
     ranking = summaries.loc[:, sorted(required)].copy()
+    if "max_drawdown_q95" in summaries.columns:
+        ranking["max_drawdown_q95"] = summaries["max_drawdown_q95"]
     downside_col = "expected_shortfall_95_pct"
     if downside_col in summaries.columns:
         ranking[downside_col] = summaries[downside_col]
@@ -175,10 +188,17 @@ def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
     else:
         downside_penalty = ranking["value_at_risk_95_pct"]
 
+    drawdown_penalty = (
+        summaries["max_drawdown_q95"]
+        if "max_drawdown_q95" in summaries.columns
+        else 0.0
+    )
+
     ranking["score"] = (
         ranking["expected_return"] * 100.0
         + (ranking["prob_above_current"] - 0.5) * 40.0
         - downside_penalty * 100.0
+        - drawdown_penalty * 35.0
     )
     ranking["recommendation"] = "WATCH"
     ranking.loc[ranking["score"] >= 10.0, "recommendation"] = "BUY"
@@ -274,6 +294,7 @@ def apply_risk_guards(
     min_expected_return: float = 0.0,
     min_prob_above_current: float = 0.5,
     max_value_at_risk_95_pct: float = 0.25,
+    max_drawdown_q95: float | None = None,
 ) -> pd.DataFrame:
     """Apply hard risk/reward filters to ranking output.
 
@@ -299,6 +320,8 @@ def apply_risk_guards(
         raise ValueError("min_prob_above_current must be between 0 and 1")
     if max_value_at_risk_95_pct < 0:
         raise ValueError("max_value_at_risk_95_pct must be non-negative")
+    if max_drawdown_q95 is not None and max_drawdown_q95 < 0:
+        raise ValueError("max_drawdown_q95 must be non-negative when provided")
 
     guarded = rankings.copy()
     guarded["guardrail_reasons"] = ""
@@ -306,6 +329,11 @@ def apply_risk_guards(
     fail_expected = guarded["expected_return"] < min_expected_return
     fail_prob = guarded["prob_above_current"] < min_prob_above_current
     fail_var = guarded["value_at_risk_95_pct"] > max_value_at_risk_95_pct
+    fail_drawdown = (
+        guarded["max_drawdown_q95"] > max_drawdown_q95
+        if max_drawdown_q95 is not None and "max_drawdown_q95" in guarded.columns
+        else pd.Series(False, index=guarded.index)
+    )
 
     reasons = []
     for ticker in guarded.index:
@@ -322,10 +350,14 @@ def apply_risk_guards(
             ticker_reasons.append(
                 f"value_at_risk_95_pct>{max_value_at_risk_95_pct:.1%}"
             )
+        if bool(fail_drawdown.loc[ticker]):
+            ticker_reasons.append(
+                f"max_drawdown_q95>{max_drawdown_q95:.1%}"
+            )
         reasons.append("; ".join(ticker_reasons))
 
     guarded["guardrail_reasons"] = reasons
-    failed_any = fail_expected | fail_prob | fail_var
+    failed_any = fail_expected | fail_prob | fail_var | fail_drawdown
     guarded.loc[failed_any, "recommendation"] = "AVOID"
     return guarded
 
