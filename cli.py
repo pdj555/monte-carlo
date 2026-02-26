@@ -16,6 +16,7 @@ import pandas as pd
 
 from ai import OpenAIConfigurationError, OpenAIRequestError, generate_ai_summary
 from analysis import (
+    build_action_plan,
     rank_tickers,
     recommend_allocations,
     summarize_equal_weight_portfolio,
@@ -374,6 +375,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     summary_df = pd.DataFrame(summaries).T if summaries else pd.DataFrame()
     rankings = rank_tickers(summary_df) if not summary_df.empty else pd.DataFrame()
     allocations = recommend_allocations(rankings) if not rankings.empty else pd.DataFrame()
+    action_plan = build_action_plan(rankings, allocations)
 
     if not rankings.empty:
         print("\nTicker ranking")
@@ -387,6 +389,19 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 float_format=lambda v: f"{v:0.3f}"
             )
         )
+
+    print("\nAction plan")
+    print(f"- Stance: {action_plan['stance']}")
+    print(f"- Headline: {action_plan['headline']}")
+    if action_plan["primary_pick"] is not None:
+        pick = action_plan["primary_pick"]
+        print(
+            "- Primary pick: "
+            f"{pick['ticker']} (weight {pick['weight']:.1%}, score {pick['score']:.1f}, "
+            f"expected return {pick['expected_return']:.1%})"
+        )
+    if action_plan["avoid_list"]:
+        print(f"- Avoid: {', '.join(action_plan['avoid_list'])}")
 
     report: dict[str, object] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -405,6 +420,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "portfolio_summary": (portfolio_summary.to_dict() if portfolio_summary is not None else None),
         "rankings": rankings.to_dict(orient="index") if not rankings.empty else {},
         "allocations": allocations.to_dict(orient="index") if not allocations.empty else {},
+        "action_plan": action_plan,
         "errors": errors,
     }
 
@@ -421,6 +437,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
         if not allocations.empty:
             allocations.to_csv(output_dir / "allocations.csv", float_format="%.6g")
+
+        with (output_dir / "action_plan.md").open("w", encoding="utf-8") as handle:
+            handle.write(f"# Action Plan\n\n")
+            handle.write(f"- **Stance:** {action_plan['stance']}\n")
+            handle.write(f"- **Headline:** {action_plan['headline']}\n")
+            if action_plan["primary_pick"] is not None:
+                pick = action_plan["primary_pick"]
+                handle.write(
+                    "- **Primary pick:** "
+                    f"{pick['ticker']} (weight {pick['weight']:.1%}, score {pick['score']:.1f}, "
+                    f"expected return {pick['expected_return']:.1%})\n"
+                )
+            if action_plan["avoid_list"]:
+                handle.write(f"- **Avoid:** {', '.join(action_plan['avoid_list'])}\n")
 
         if args.save_simulations and not combined.empty:
             combined.to_csv(output_dir / "simulations.csv.gz", compression="gzip")
