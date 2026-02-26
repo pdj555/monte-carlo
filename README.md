@@ -67,8 +67,9 @@ Notable options:
 | `--min-expected-return` | Hard floor for expected return (below this becomes `AVOID`). |
 | `--min-prob-up` | Minimum probability of finishing above current price. |
 | `--max-var-95-pct` | Maximum tolerated 95% VaR (as % of current price). |
+| `--max-drawdown-q95-pct` | Optional cap on path max drawdown (95th percentile) to hard-filter fragile setups. |
 
-Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices. When you pass multiple tickers to `cli.py`, it now also emits an **equal-weight portfolio** summary so you can judge basket-level upside/downside instead of isolated symbols.
+Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices. The CLI now also reports **path-risk drawdown metrics** (`max_drawdown_mean`, `max_drawdown_q95`, and probability of breaching 10%/20% drawdowns), which are more decision-useful than endpoint-only stats. When you pass multiple tickers to `cli.py`, it also emits an **equal-weight portfolio** summary so you can judge basket-level upside/downside instead of isolated symbols.
 
 The CLI now also prints a concise **Action plan** section (stance, primary pick, and avoid list) and saves the same guidance to `action_plan.md` in the output directory. This gives a decision-oriented readout rather than raw metrics only.
 

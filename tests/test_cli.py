@@ -58,6 +58,7 @@ def test_cli_runs_multi_ticker(tmp_path):
     assert result["report"]["portfolio_summary"] is not None
     assert result["report"]["portfolio_summary"]["component_count"] == 2.0
     assert set(result["report"]["rankings"]) == {"AAPL", "MSFT"}
+    assert "max_drawdown_q95" in result["report"]["rankings"]["AAPL"]
     assert result["report"]["allocations"]
     assert result["report"]["action_plan"]["stance"] in {"RISK_ON", "SELECTIVE", "DEFENSIVE"}
     assert (output_dir / "rankings.csv").exists()
@@ -164,3 +165,37 @@ def test_cli_guardrails_can_force_defensive_plan(tmp_path):
     assert ranking["recommendation"] == "AVOID"
     assert "expected_return<50.0%" in ranking["guardrail_reasons"]
     assert result["report"]["action_plan"]["stance"] == "DEFENSIVE"
+
+
+def test_cli_drawdown_guardrail_can_force_avoid(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    dates = pd.date_range("2024-01-01", periods=60, freq="D")
+    close = np.tile([100.0, 130.0, 90.0, 125.0, 88.0], 12)
+    pd.DataFrame({"Date": dates, "Close": close}).to_csv(data_dir / "AAPL.csv", index=False)
+
+    args = parse_args(
+        [
+            "--tickers",
+            "AAPL",
+            "--days",
+            "25",
+            "--scenarios",
+            "80",
+            "--seed",
+            "2",
+            "--no-show",
+            "--no-plots",
+            "--offline-path",
+            str(data_dir),
+            "--offline-only",
+            "--max-drawdown-q95-pct",
+            "0.2",
+        ]
+    )
+
+    result = run(args)
+    ranking = result["report"]["rankings"]["AAPL"]
+
+    assert ranking["recommendation"] == "AVOID"
+    assert "max_drawdown_q95>20.0%" in ranking["guardrail_reasons"]
