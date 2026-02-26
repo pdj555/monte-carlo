@@ -479,6 +479,7 @@ def apply_risk_guards(
 __all__ = [
     "apply_risk_guards",
     "build_action_plan",
+    "build_execution_plan",
     "enforce_portfolio_risk_budget",
     "rank_tickers",
     "recommend_allocations",
@@ -559,3 +560,40 @@ def build_action_plan(
         "avoid_list": avoid_list,
         "cash_weight": cash_weight,
     }
+
+
+def build_execution_plan(
+    allocations: pd.DataFrame,
+    *,
+    current_prices: Mapping[str, float],
+    capital: float,
+    allow_fractional_shares: bool = False,
+) -> pd.DataFrame:
+    """Translate allocation weights into executable order sizes."""
+
+    if allocations.empty:
+        return pd.DataFrame(
+            columns=["weight", "price", "target_dollars", "shares", "est_cost", "cash_drift"]
+        )
+    if capital <= 0:
+        raise ValueError("capital must be positive")
+    if "weight" not in allocations.columns:
+        raise ValueError("allocations missing required columns: weight")
+
+    plan = allocations.copy()
+    plan["price"] = pd.Series(current_prices).reindex(plan.index)
+    if plan["price"].isna().any():
+        missing = ", ".join(plan.index[plan["price"].isna()].tolist())
+        raise ValueError(f"missing current prices for: {missing}")
+    if (plan["price"] <= 0).any():
+        raise ValueError("current_prices must be positive")
+
+    plan["target_dollars"] = plan["weight"].clip(lower=0.0) * float(capital)
+    if allow_fractional_shares:
+        plan["shares"] = plan["target_dollars"] / plan["price"]
+    else:
+        plan["shares"] = (plan["target_dollars"] / plan["price"]).floordiv(1)
+    plan["shares"] = plan["shares"].astype(float)
+    plan["est_cost"] = plan["shares"] * plan["price"]
+    plan["cash_drift"] = plan["target_dollars"] - plan["est_cost"]
+    return plan
