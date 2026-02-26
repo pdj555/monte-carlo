@@ -119,6 +119,25 @@ def test_summarize_equal_weight_portfolio_combines_tickers():
     assert summary["expected_return"] == pytest.approx(0.1)
 
 
+def test_summarize_final_prices_reports_benchmark_metrics():
+    df = pd.DataFrame({
+        0: [100.0, 106.0],
+        1: [100.0, 102.0],
+        2: [100.0, 98.0],
+        3: [100.0, 95.0],
+    })
+
+    summary = summarize_final_prices(
+        df,
+        current_price=100.0,
+        benchmark_return_pct=0.02,
+    )
+
+    assert summary["benchmark_return_pct"] == pytest.approx(0.02)
+    assert summary["expected_excess_return"] == pytest.approx(summary["expected_return"] - 0.02)
+    assert summary["prob_beat_benchmark"] == pytest.approx(0.5)
+
+
 def test_rank_tickers_orders_by_score():
     summaries = pd.DataFrame(
         {
@@ -133,6 +152,22 @@ def test_rank_tickers_orders_by_score():
     assert list(ranked.index) == ["AAPL", "MSFT", "TSLA"]
     assert ranked.loc["AAPL", "recommendation"] == "BUY"
     assert ranked.loc["TSLA", "recommendation"] == "AVOID"
+
+
+def test_rank_tickers_penalizes_negative_excess_return():
+    summaries = pd.DataFrame(
+        {
+            "expected_return": {"AAPL": 0.08, "MSFT": 0.11},
+            "expected_excess_return": {"AAPL": 0.03, "MSFT": -0.01},
+            "prob_above_current": {"AAPL": 0.58, "MSFT": 0.62},
+            "prob_beat_benchmark": {"AAPL": 0.56, "MSFT": 0.42},
+            "value_at_risk_95_pct": {"AAPL": 0.07, "MSFT": 0.06},
+        }
+    )
+
+    ranked = rank_tickers(summaries)
+
+    assert list(ranked.index) == ["AAPL", "MSFT"]
 
 
 def test_rank_tickers_prefers_expected_shortfall_when_available():
