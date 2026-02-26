@@ -65,7 +65,7 @@ Notable options:
 | `--offline-only` | Never hit the network—expect local CSV data. |
 | `--strict` | Exit non-zero if any ticker fails. |
 
-Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices.
+Both the CLI and the legacy script output a statistical summary including mean, median, quantiles, expected return and 95% value-at-risk for the simulated final prices. When you pass multiple tickers to `cli.py`, it now also emits an **equal-weight portfolio** summary so you can judge basket-level upside/downside instead of isolated symbols.
 
 ## Offline Data
 
