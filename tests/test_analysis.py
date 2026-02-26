@@ -7,6 +7,7 @@ import pytest
 from analysis import (
     apply_risk_guards,
     build_action_plan,
+    enforce_portfolio_risk_budget,
     rank_tickers,
     recommend_allocations,
     summarize_equal_weight_portfolio,
@@ -336,3 +337,47 @@ def test_apply_risk_guards_can_enforce_target_and_loss_breach_probabilities():
     assert guarded.loc["TSLA", "recommendation"] == "AVOID"
     assert "prob_hit_target<40%" in guarded.loc["TSLA", "guardrail_reasons"]
     assert "prob_breach_max_loss>20%" in guarded.loc["TSLA", "guardrail_reasons"]
+
+
+def test_enforce_portfolio_risk_budget_scales_weights_when_budget_exceeded():
+    rankings = pd.DataFrame(
+        {
+            "value_at_risk_95_pct": {"AAPL": 0.20, "MSFT": 0.10},
+        }
+    )
+    allocations = pd.DataFrame(
+        {
+            "weight": {"AAPL": 0.6, "MSFT": 0.4},
+        }
+    )
+
+    constrained = enforce_portfolio_risk_budget(
+        allocations,
+        rankings,
+        max_portfolio_var_95_pct=0.08,
+    )
+
+    blended = float((constrained["weight"] * rankings["value_at_risk_95_pct"]).sum())
+    assert blended == pytest.approx(0.08)
+    assert constrained["weight"].sum() < allocations["weight"].sum()
+
+
+def test_enforce_portfolio_risk_budget_keeps_weights_when_under_budget():
+    rankings = pd.DataFrame(
+        {
+            "value_at_risk_95_pct": {"AAPL": 0.05, "MSFT": 0.03},
+        }
+    )
+    allocations = pd.DataFrame(
+        {
+            "weight": {"AAPL": 0.5, "MSFT": 0.5},
+        }
+    )
+
+    constrained = enforce_portfolio_risk_budget(
+        allocations,
+        rankings,
+        max_portfolio_var_95_pct=0.08,
+    )
+
+    pd.testing.assert_frame_equal(constrained, allocations)

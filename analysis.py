@@ -340,6 +340,44 @@ def recommend_allocations(
     return allocation
 
 
+def enforce_portfolio_risk_budget(
+    allocations: pd.DataFrame,
+    rankings: pd.DataFrame,
+    *,
+    max_portfolio_var_95_pct: float,
+) -> pd.DataFrame:
+    """Scale allocations so blended 95% VaR stays within a hard budget.
+
+    Parameters
+    ----------
+    allocations : pandas.DataFrame
+        Allocation table containing a ``weight`` column.
+    rankings : pandas.DataFrame
+        Ranking table containing ``value_at_risk_95_pct`` for each ticker.
+    max_portfolio_var_95_pct : float
+        Maximum tolerated blended 95% VaR as a fraction of total capital.
+    """
+
+    if allocations.empty:
+        return allocations.copy()
+    if max_portfolio_var_95_pct < 0:
+        raise ValueError("max_portfolio_var_95_pct must be non-negative")
+    if "weight" not in allocations.columns:
+        raise ValueError("allocations missing required columns: weight")
+    if "value_at_risk_95_pct" not in rankings.columns:
+        raise ValueError("rankings missing required columns: value_at_risk_95_pct")
+
+    scoped = allocations.copy()
+    scoped_var = rankings.reindex(scoped.index)["value_at_risk_95_pct"].fillna(0.0)
+    blended_var = float((scoped["weight"] * scoped_var).sum())
+    if blended_var <= max_portfolio_var_95_pct or blended_var <= 0.0:
+        return scoped
+
+    scale = max_portfolio_var_95_pct / blended_var
+    scoped["weight"] = scoped["weight"] * scale
+    return scoped
+
+
 def apply_risk_guards(
     rankings: pd.DataFrame,
     *,
@@ -441,6 +479,7 @@ def apply_risk_guards(
 __all__ = [
     "apply_risk_guards",
     "build_action_plan",
+    "enforce_portfolio_risk_budget",
     "rank_tickers",
     "recommend_allocations",
     "summarize_final_prices",

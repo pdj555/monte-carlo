@@ -100,6 +100,11 @@ def test_cli_rejects_negative_seed():
         parse_args(["--seed", "-1"])
 
 
+def test_cli_rejects_negative_portfolio_risk_budget_pct():
+    with pytest.raises(SystemExit):
+        parse_args(["--portfolio-risk-budget-pct", "-0.01"])
+
+
 def test_cli_no_plots_skips_plot_files(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -261,9 +266,9 @@ def test_cli_shock_mode_lowers_expected_return(tmp_path):
                 str(data_dir),
                 "--offline-only",
                 "--shock-probability",
-                "0.2",
+                "0.02",
                 "--shock-return",
-                "-0.2",
+                "-0.05",
             ]
         )
     )
@@ -313,3 +318,80 @@ def test_cli_reports_target_and_loss_probabilities(tmp_path):
     assert 0.0 <= summary["prob_breach_max_loss"] <= 1.0
     assert "prob_hit_target" in ranking
     assert "prob_breach_max_loss" in ranking
+
+
+def test_cli_applies_portfolio_risk_budget_scaling(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.4)
+    _write_sample_csv(str(data_dir), "MSFT", trend=0.35)
+
+    unconstrained = run(
+        parse_args(
+            [
+                "--tickers",
+                "AAPL,MSFT",
+                "--days",
+                "25",
+                "--scenarios",
+                "250",
+                "--seed",
+                "123",
+                "--no-show",
+                "--no-plots",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+                "--portfolio-risk-budget-pct",
+                "1.0",
+                "--shock-probability",
+                "0.02",
+                "--shock-return",
+                "-0.05",
+                "--min-expected-return",
+                "-1.0",
+                "--min-prob-up",
+                "0.0",
+                "--max-var-95-pct",
+                "1.0",
+            ]
+        )
+    )
+
+    constrained = run(
+        parse_args(
+            [
+                "--tickers",
+                "AAPL,MSFT",
+                "--days",
+                "25",
+                "--scenarios",
+                "250",
+                "--seed",
+                "123",
+                "--no-show",
+                "--no-plots",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+                "--portfolio-risk-budget-pct",
+                "0.01",
+                "--shock-probability",
+                "0.02",
+                "--shock-return",
+                "-0.05",
+                "--min-expected-return",
+                "-1.0",
+                "--min-prob-up",
+                "0.0",
+                "--max-var-95-pct",
+                "1.0",
+            ]
+        )
+    )
+
+    unconstrained_weight = sum(item["weight"] for item in unconstrained["report"]["allocations"].values())
+    constrained_weight = sum(item["weight"] for item in constrained["report"]["allocations"].values())
+
+    assert constrained_weight < unconstrained_weight
+    assert constrained["report"]["portfolio_risk_budget_pct"] == pytest.approx(0.01)
