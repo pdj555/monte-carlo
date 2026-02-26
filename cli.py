@@ -22,6 +22,7 @@ from analysis import (
     recommend_allocations,
     summarize_equal_weight_portfolio,
     summarize_final_prices,
+    enforce_portfolio_risk_budget,
 )
 from data import PriceDataError, fetch_prices
 from simulation import estimate_gbm_parameters, simulate_gbm, simulate_prices
@@ -215,6 +216,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Minimum probability that final price exceeds current price (0-1).",
     )
     parser.add_argument(
+        "--portfolio-risk-budget-pct",
+        type=float,
+        default=0.02,
+        help=(
+            "Hard cap for blended portfolio 95%% VaR as a fraction of total capital; "
+            "allocations are auto-scaled down to respect this budget."
+        ),
+    )
+    parser.add_argument(
         "--max-var-95-pct",
         type=float,
         default=0.25,
@@ -292,6 +302,8 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         parser.error("--min-prob-hit-target requires --target-return-pct")
     if args.max_prob_breach_loss is not None and args.max_loss_pct is None:
         parser.error("--max-prob-breach-loss requires --max-loss-pct")
+    if float(args.portfolio_risk_budget_pct) < 0:
+        parser.error("--portfolio-risk-budget-pct must be non-negative")
     return args
 
 
@@ -495,6 +507,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         else rankings
     )
     allocations = recommend_allocations(rankings) if not rankings.empty else pd.DataFrame()
+    if not allocations.empty:
+        allocations = enforce_portfolio_risk_budget(
+            allocations,
+            rankings,
+            max_portfolio_var_95_pct=float(args.portfolio_risk_budget_pct),
+        )
     action_plan = build_action_plan(rankings, allocations)
 
     if not rankings.empty:
@@ -553,6 +571,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "portfolio_summary": (portfolio_summary.to_dict() if portfolio_summary is not None else None),
         "rankings": rankings.to_dict(orient="index") if not rankings.empty else {},
         "allocations": allocations.to_dict(orient="index") if not allocations.empty else {},
+        "portfolio_risk_budget_pct": float(args.portfolio_risk_budget_pct),
         "action_plan": action_plan,
         "errors": errors,
     }
