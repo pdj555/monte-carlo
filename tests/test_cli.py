@@ -131,3 +131,36 @@ def test_cli_no_plots_skips_plot_files(tmp_path):
     assert not result["summaries"].empty
     assert (output_dir / "AAPL_distribution.png").exists() is False
     assert (output_dir / "AAPL_paths.png").exists() is False
+
+
+def test_cli_guardrails_can_force_defensive_plan(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.05)
+
+    args = parse_args(
+        [
+            "--tickers",
+            "AAPL",
+            "--days",
+            "15",
+            "--scenarios",
+            "50",
+            "--seed",
+            "1",
+            "--no-show",
+            "--no-plots",
+            "--offline-path",
+            str(data_dir),
+            "--offline-only",
+            "--min-expected-return",
+            "0.5",
+        ]
+    )
+
+    result = run(args)
+    ranking = result["report"]["rankings"]["AAPL"]
+
+    assert ranking["recommendation"] == "AVOID"
+    assert "expected_return<50.0%" in ranking["guardrail_reasons"]
+    assert result["report"]["action_plan"]["stance"] == "DEFENSIVE"
