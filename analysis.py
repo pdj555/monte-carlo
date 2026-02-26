@@ -31,11 +31,11 @@ def summarize_final_prices(
         Additional quantiles to report. Values must be between ``0`` and ``1``.
     target_return_pct : float, optional
         Decision target expressed as simple return from ``current_price``. When
-        provided, include probability of finishing at or above target.
+        provided, include end-of-horizon and path-level target-hit probabilities.
     max_loss_pct : float, optional
         Maximum acceptable loss expressed as a positive fraction from
-        ``current_price``. When provided, include probability of breaching this
-        loss threshold.
+        ``current_price``. When provided, include end-of-horizon and path-level
+        breach probabilities.
 
     Returns
     -------
@@ -115,12 +115,34 @@ def summarize_final_prices(
             realized_returns = final_prices / current_price - 1.0
             summary["prob_hit_target"] = float((realized_returns >= target_return_pct).mean())
 
+            target_price = current_price * (1.0 + target_return_pct)
+            target_hits = df >= target_price
+            touched_target = target_hits.any(axis=0)
+            summary["prob_touch_target"] = float(touched_target.mean())
+            if bool(touched_target.any()):
+                first_target_steps = target_hits.to_numpy().argmax(axis=0)
+                summary["median_days_to_target"] = float(
+                    pd.Series(first_target_steps, index=df.columns)[touched_target].median()
+                )
+            else:
+                summary["median_days_to_target"] = float("nan")
+
         if max_loss_pct is not None:
             if max_loss_pct < 0:
                 raise ValueError("max_loss_pct must be non-negative when provided")
             loss_floor = current_price * (1.0 - float(max_loss_pct))
             summary["max_loss_pct"] = float(max_loss_pct)
             summary["prob_breach_max_loss"] = float((final_prices <= loss_floor).mean())
+            loss_hits = df <= loss_floor
+            touched_loss = loss_hits.any(axis=0)
+            summary["prob_touch_max_loss"] = float(touched_loss.mean())
+            if bool(touched_loss.any()):
+                first_loss_steps = loss_hits.to_numpy().argmax(axis=0)
+                summary["median_days_to_max_loss"] = float(
+                    pd.Series(first_loss_steps, index=df.columns)[touched_loss].median()
+                )
+            else:
+                summary["median_days_to_max_loss"] = float("nan")
 
     if len(df.index) > 1:
         running_peaks = df.cummax()
