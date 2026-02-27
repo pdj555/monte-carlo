@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import zlib
@@ -83,6 +84,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--version",
         action="version",
         version=f"%(prog)s {_package_version()}",
+    )
+    parser.add_argument(
+        "--journal-file",
+        type=str,
+        help=(
+            "Optional append-only JSONL decision journal. "
+            "Each run writes a tamper-evident chained entry for audit history."
+        ),
     )
     parser.add_argument(
         "--policy-file",
@@ -407,6 +416,82 @@ def _normalise_tickers(ticker_arg: str) -> list[str]:
     return tickers
 
 
+def _hash_payload(payload: dict[str, object]) -> str:
+    """Return a deterministic SHA-256 hash for a JSON-compatible payload."""
+
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _last_journal_chain_hash(journal_path: Path) -> str | None:
+    """Return the last chain hash from a JSONL journal, if available."""
+
+    if not journal_path.exists():
+        return None
+
+    try:
+        lines = journal_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        value = entry.get("chain_hash")
+        return str(value) if isinstance(value, str) and value else None
+    return None
+
+
+def _append_journal_entry(
+    *,
+    journal_path: Path,
+    report: dict[str, object],
+    args: argparse.Namespace,
+) -> dict[str, object]:
+    """Append a tamper-evident run entry to the decision journal."""
+
+    previous_chain_hash = _last_journal_chain_hash(journal_path)
+    report_hash = _hash_payload(report)
+    summary = {
+        ticker: payload.get("summary", {})
+        for ticker, payload in report.get("results", {}).items()
+        if isinstance(payload, dict)
+    }
+
+    body = {
+        "generated_at": report.get("generated_at"),
+        "tickers": sorted(summary.keys()),
+        "model": args.model,
+        "days": int(args.days),
+        "scenarios": int(args.scenarios),
+        "portfolio_risk_budget_pct": float(args.portfolio_risk_budget_pct),
+        "policy_crc32": report.get("policy_crc32"),
+        "report_hash": report_hash,
+        "previous_chain_hash": previous_chain_hash,
+        "summaries": summary,
+    }
+
+    chain_hash_input = {
+        "report_hash": report_hash,
+        "previous_chain_hash": previous_chain_hash,
+    }
+    entry = {
+        "schema_version": 1,
+        **body,
+        "chain_hash": _hash_payload(chain_hash_input),
+    }
+    journal_path.parent.mkdir(parents=True, exist_ok=True)
+    with journal_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, sort_keys=True))
+        handle.write("\n")
+    return entry
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     """Execute the CLI workflow and return simulation artefacts."""
 
@@ -414,6 +499,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = Path(args.output).expanduser() if args.output else None
     offline_path = Path(args.offline_path).expanduser() if args.offline_path else None
     cache_dir = Path(args.cache_dir).expanduser() if args.cache_dir else None
+    journal_file = Path(args.journal_file).expanduser() if args.journal_file else None
 
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -683,6 +769,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "action_plan": action_plan,
         "errors": errors,
     }
+
+    if journal_file is not None:
+        journal_entry = _append_journal_entry(
+            journal_path=journal_file,
+            report=report,
+            args=args,
+        )
+        report["journal"] = {
+            "file": str(journal_file),
+            "chain_hash": journal_entry["chain_hash"],
+            "previous_chain_hash": journal_entry["previous_chain_hash"],
+        }
 
     if output_dir is not None:
         summary_df.to_csv(output_dir / "summaries.csv", float_format="%.6g")
