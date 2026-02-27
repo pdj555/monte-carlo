@@ -585,3 +585,38 @@ def test_cli_explicit_flags_override_policy_file(tmp_path):
     ranking = result["report"]["rankings"]["AAPL"]
 
     assert ranking["recommendation"] in {"BUY", "WATCH"}
+
+
+def test_cli_appends_tamper_evident_decision_journal(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.3)
+
+    journal_path = tmp_path / "journal" / "decisions.jsonl"
+
+    base_args = [
+        "--tickers",
+        "AAPL",
+        "--days",
+        "20",
+        "--scenarios",
+        "50",
+        "--seed",
+        "123",
+        "--no-show",
+        "--no-plots",
+        "--offline-path",
+        str(data_dir),
+        "--offline-only",
+        "--journal-file",
+        str(journal_path),
+    ]
+
+    first = run(parse_args(base_args))
+    second = run(parse_args(base_args + ["--seed", "124"]))
+
+    entries = [json.loads(line) for line in journal_path.read_text(encoding="utf-8").splitlines()]
+    assert len(entries) == 2
+    assert entries[0]["previous_chain_hash"] is None
+    assert entries[1]["previous_chain_hash"] == entries[0]["chain_hash"]
+    assert second["report"]["journal"]["previous_chain_hash"] == first["report"]["journal"]["chain_hash"]
