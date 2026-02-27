@@ -85,6 +85,14 @@ def build_parser() -> argparse.ArgumentParser:
         version=f"%(prog)s {_package_version()}",
     )
     parser.add_argument(
+        "--policy-file",
+        type=str,
+        help=(
+            "Optional JSON policy contract with default guardrails/constraints. "
+            "CLI flags override policy values when both are provided."
+        ),
+    )
+    parser.add_argument(
         "--tickers",
         "--ticker",
         dest="tickers",
@@ -317,7 +325,10 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     """Return parsed CLI arguments."""
 
     parser = build_parser()
-    args = parser.parse_args(list(argv) if argv is not None else None)
+    raw_argv = list(argv) if argv is not None else None
+    args = parser.parse_args(raw_argv)
+    if args.policy_file:
+        args = _apply_policy_file(args, parser=parser, argv=raw_argv)
     if not 0.0 <= float(args.shock_probability) <= 1.0:
         parser.error("--shock-probability must be between 0 and 1")
     if float(args.shock_return) <= -1.0:
@@ -336,6 +347,48 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         parser.error("--portfolio-risk-budget-pct must be non-negative")
     if float(args.annual_cash_yield) < 0:
         parser.error("--annual-cash-yield must be non-negative")
+    return args
+
+
+def _apply_policy_file(
+    args: argparse.Namespace,
+    *,
+    parser: argparse.ArgumentParser,
+    argv: Optional[list[str]],
+) -> argparse.Namespace:
+    """Apply JSON policy defaults to CLI args while respecting explicit flags."""
+
+    policy_path = Path(args.policy_file).expanduser()
+    try:
+        payload = json.loads(policy_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        parser.error(f"--policy-file not found: {policy_path}")
+    except json.JSONDecodeError as exc:
+        parser.error(f"--policy-file is not valid JSON: {exc}")
+    except OSError as exc:
+        parser.error(f"Unable to read --policy-file: {exc}")
+
+    if not isinstance(payload, dict):
+        parser.error("--policy-file must contain a top-level JSON object")
+
+    normalized: dict[str, object] = {}
+    for key, value in payload.items():
+        normalized_key = str(key).replace("-", "_")
+        if not hasattr(args, normalized_key):
+            parser.error(f"--policy-file contains unknown key: {key}")
+        if normalized_key == "policy_file":
+            continue
+        normalized[normalized_key] = value
+
+    provided_flags = set(argv or [])
+    for key, value in normalized.items():
+        option = f"--{key.replace('_', '-')}"
+        if option in provided_flags:
+            continue
+        setattr(args, key, value)
+
+    args.policy_file = str(policy_path)
+    args.policy = normalized
     return args
 
 
@@ -621,6 +674,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "allocations": allocations.to_dict(orient="index") if not allocations.empty else {},
         "execution_plan": execution_plan.to_dict(orient="index") if not execution_plan.empty else {},
         "portfolio_risk_budget_pct": float(args.portfolio_risk_budget_pct),
+        "policy": getattr(args, "policy", {}),
+        "policy_crc32": (
+            f"{zlib.crc32(json.dumps(getattr(args, 'policy', {}), sort_keys=True).encode('utf-8')):08x}"
+            if getattr(args, "policy", None)
+            else None
+        ),
         "action_plan": action_plan,
         "errors": errors,
     }

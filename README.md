@@ -64,6 +64,7 @@ Notable options:
 | `--no-show` | Skip displaying plots (useful on servers/CI). |
 | `--offline-path` | Directory or CSV file used when offline data is required. |
 | `--offline-only` | Never hit the network—expect local CSV data. |
+| `--policy-file` | JSON policy contract of default risk constraints/operating limits (CLI flags still win). |
 | `--strict` | Exit non-zero if any ticker fails. |
 | `--min-expected-return` | Hard floor for expected return (below this becomes `AVOID`). |
 | `--min-prob-up` | Minimum probability of finishing above current price. |
@@ -87,6 +88,7 @@ When `--capital` is provided, the CLI also produces an **Execution plan** with t
 The allocator is now **risk-budgeted by default**: set `--portfolio-risk-budget-pct` (default `0.02`) and the tool automatically scales total exposure so the blended portfolio 95% VaR stays under your loss budget, with the remainder explicitly left in cash.
 It now also estimates **payoff asymmetry** (`avg_upside_pct`, `avg_downside_pct`, `payoff_ratio`) and a capped **Kelly fraction** signal per ticker, then uses that conviction signal to tilt ranking/allocation toward setups with stronger risk-reward geometry.
 It now supports an explicit **goal/risk contract**: set an upside target and maximum loss, then enforce probability constraints directly with guardrails (`prob_hit_target`, `prob_breach_max_loss`) so output maps to concrete decision thresholds instead of vague optimism.
+For operational control, you can also provide a **policy contract** (`--policy-file`) to lock in your default guardrails (risk budget, return floors, probability limits, etc.) as JSON, then track its fingerprint in `report.json` (`policy_crc32`) for auditability.
 You also get **path-aware execution metrics** (`prob_touch_target`, `prob_touch_max_loss`, `median_days_to_target`, `median_days_to_max_loss`) so you can judge whether a setup tends to hit your take-profit/stop-loss *at any point* during the run, not only at final day.
 
 For decisive execution, use guardrails to enforce your risk policy directly in ranking/allocation output, e.g.:
