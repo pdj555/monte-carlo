@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -504,3 +505,83 @@ def test_cli_report_includes_benchmark_metrics(tmp_path):
     assert "expected_excess_return" in summary
     assert "prob_beat_benchmark" in summary
 
+
+def test_cli_policy_file_applies_defaults_and_reports_fingerprint(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.3)
+
+    policy_file = tmp_path / "policy.json"
+    policy_file.write_text(
+        json.dumps(
+            {
+                "min_expected_return": 0.5,
+                "min_prob_up": 0.99,
+                "max_var_95_pct": 0.05,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run(
+        parse_args(
+            [
+                "--tickers",
+                "AAPL",
+                "--days",
+                "20",
+                "--scenarios",
+                "100",
+                "--seed",
+                "123",
+                "--no-show",
+                "--no-plots",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+                "--policy-file",
+                str(policy_file),
+            ]
+        )
+    )
+
+    ranking = result["report"]["rankings"]["AAPL"]
+    assert ranking["recommendation"] == "AVOID"
+    assert result["report"]["policy"]["min_expected_return"] == 0.5
+    assert result["report"]["policy_crc32"] is not None
+
+
+def test_cli_explicit_flags_override_policy_file(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.3)
+
+    policy_file = tmp_path / "policy.json"
+    policy_file.write_text(json.dumps({"min_expected_return": 0.9}), encoding="utf-8")
+
+    args = parse_args(
+        [
+            "--tickers",
+            "AAPL",
+            "--days",
+            "20",
+            "--scenarios",
+            "100",
+            "--seed",
+            "123",
+            "--no-show",
+            "--no-plots",
+            "--offline-path",
+            str(data_dir),
+            "--offline-only",
+            "--policy-file",
+            str(policy_file),
+            "--min-expected-return",
+            "-1.0",
+        ]
+    )
+
+    result = run(args)
+    ranking = result["report"]["rankings"]["AAPL"]
+
+    assert ranking["recommendation"] in {"BUY", "WATCH"}
