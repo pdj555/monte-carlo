@@ -65,6 +65,7 @@ Notable options:
 | `--offline-path` | Directory or CSV file used when offline data is required. |
 | `--offline-only` | Never hit the network—expect local CSV data. |
 | `--policy-file` | JSON policy contract of default risk constraints/operating limits (CLI flags still win). |
+| `--journal-file` | Append-only JSONL run ledger with chained hashes for tamper-evident audit history. |
 | `--strict` | Exit non-zero if any ticker fails. |
 | `--min-expected-return` | Hard floor for expected return (below this becomes `AVOID`). |
 | `--min-prob-up` | Minimum probability of finishing above current price. |
@@ -89,6 +90,7 @@ The allocator is now **risk-budgeted by default**: set `--portfolio-risk-budget-
 It now also estimates **payoff asymmetry** (`avg_upside_pct`, `avg_downside_pct`, `payoff_ratio`) and a capped **Kelly fraction** signal per ticker, then uses that conviction signal to tilt ranking/allocation toward setups with stronger risk-reward geometry.
 It now supports an explicit **goal/risk contract**: set an upside target and maximum loss, then enforce probability constraints directly with guardrails (`prob_hit_target`, `prob_breach_max_loss`) so output maps to concrete decision thresholds instead of vague optimism.
 For operational control, you can also provide a **policy contract** (`--policy-file`) to lock in your default guardrails (risk budget, return floors, probability limits, etc.) as JSON, then track its fingerprint in `report.json` (`policy_crc32`) for auditability.
+Use `--journal-file` to build an append-only **decision journal** (`.jsonl`) that records each run with a chained hash (`previous_chain_hash` → `chain_hash`) so governance workflows can detect tampering and preserve an auditable decision trail over time.
 You also get **path-aware execution metrics** (`prob_touch_target`, `prob_touch_max_loss`, `median_days_to_target`, `median_days_to_max_loss`) so you can judge whether a setup tends to hit your take-profit/stop-loss *at any point* during the run, not only at final day.
 
 For decisive execution, use guardrails to enforce your risk policy directly in ranking/allocation output, e.g.:
