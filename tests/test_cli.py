@@ -620,3 +620,36 @@ def test_cli_appends_tamper_evident_decision_journal(tmp_path):
     assert entries[0]["previous_chain_hash"] is None
     assert entries[1]["previous_chain_hash"] == entries[0]["chain_hash"]
     assert second["report"]["journal"]["previous_chain_hash"] == first["report"]["journal"]["chain_hash"]
+
+
+def test_cli_minimal_mode_prints_compact_output(tmp_path, capsys):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.3)
+
+    result = run(
+        parse_args(
+            [
+                "--tickers",
+                "AAPL",
+                "--days",
+                "20",
+                "--scenarios",
+                "100",
+                "--seed",
+                "123",
+                "--no-show",
+                "--no-plots",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+                "--minimal",
+            ]
+        )
+    )
+
+    output = capsys.readouterr().out
+    assert not result["summaries"].empty
+    assert "AAPL: er=" in output
+    assert "Summary for AAPL" not in output
+    assert "PLAN" in output
