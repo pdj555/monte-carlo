@@ -317,6 +317,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Allow fractional shares when --capital is set.",
     )
     parser.add_argument(
+        "--minimal",
+        action="store_true",
+        help=(
+            "Print only compact, decision-first terminal output "
+            "(suppresses verbose tables)."
+        ),
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="Return a non-zero exit code if any ticker fails.",
@@ -522,6 +530,30 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     horizon_years = float(args.days) * float(args.dt) / 252.0
     benchmark_return_pct = (1.0 + float(args.annual_cash_yield)) ** horizon_years - 1.0
 
+    def _print_ticker_summary(ticker: str, summary: pd.Series) -> None:
+        if args.minimal:
+            expected_return = float(summary.get("expected_return", 0.0))
+            prob_up = float(summary.get("prob_above_current", 0.0))
+            var95 = float(summary.get("value_at_risk_95_pct", 0.0))
+            print(
+                f"{ticker}: er={expected_return:.1%} "
+                f"up={prob_up:.1%} var95={var95:.1%}"
+            )
+            return
+
+        print(f"\nSummary for {ticker}")
+        print(summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
+
+    def _print_portfolio_summary(summary: pd.Series) -> None:
+        if args.minimal:
+            expected_return = float(summary.get("expected_return", 0.0))
+            prob_up = float(summary.get("prob_above_current", 0.0))
+            print(f"PORTFOLIO: er={expected_return:.1%} up={prob_up:.1%}")
+            return
+
+        print("\nSummary for EQUAL_WEIGHT_PORTFOLIO")
+        print(summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
+
     for ticker in tickers:
         try:
             prices = fetch_prices(
@@ -597,8 +629,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
         summaries[ticker] = summary
 
-        print(f"\nSummary for {ticker}")
-        print(summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
+        _print_ticker_summary(ticker, summary)
 
         if args.ai_summary:
             try:
@@ -657,8 +688,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             current_prices=current_prices,
             benchmark_return_pct=benchmark_return_pct,
         )
-        print("\nSummary for EQUAL_WEIGHT_PORTFOLIO")
-        print(portfolio_summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
+        _print_portfolio_summary(portfolio_summary)
 
     summary_df = pd.DataFrame(summaries).T if summaries else pd.DataFrame()
     rankings = rank_tickers(summary_df) if not summary_df.empty else pd.DataFrame()
@@ -702,7 +732,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             allow_fractional_shares=bool(args.allow_fractional_shares),
         )
 
-    if not rankings.empty:
+    if not rankings.empty and not args.minimal:
         print("\nTicker ranking")
         display = rankings.loc[
             :,
@@ -718,7 +748,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         ]
         print(display.to_string(float_format=lambda v: f"{v:0.3f}"))
 
-    if not allocations.empty:
+    if not allocations.empty and not args.minimal:
         print("\nSuggested allocation")
         print(
             allocations.loc[:, ["weight", "score", "value_at_risk_95_pct"]].to_string(
@@ -726,7 +756,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             )
         )
 
-    print("\nAction plan")
+    if args.minimal:
+        print("\nPLAN")
+    else:
+        print("\nAction plan")
     print(f"- Stance: {action_plan['stance']}")
     print(f"- Headline: {action_plan['headline']}")
     if action_plan["primary_pick"] is not None:
