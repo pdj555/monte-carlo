@@ -117,3 +117,40 @@ def test_simulate_prices_rejects_invalid_block_size():
     returns = pd.Series([0.01, -0.02, 0.015])
     with pytest.raises(ValueError):
         simulate_prices(returns, days=10, scenarios=5, block_size=0)
+
+
+def test_simulate_prediction_market_is_bounded_and_reproducible():
+    from simulation import simulate_prediction_market
+
+    sims_a = simulate_prediction_market(
+        fundamental_probability=0.62,
+        current_price=0.55,
+        days=30,
+        scenarios=200,
+        certainty=120.0,
+        mean_reversion=0.25,
+        daily_volatility=0.04,
+        seed=123,
+    )
+    sims_b = simulate_prediction_market(
+        fundamental_probability=0.62,
+        current_price=0.55,
+        days=30,
+        scenarios=200,
+        certainty=120.0,
+        mean_reversion=0.25,
+        daily_volatility=0.04,
+        seed=123,
+    )
+
+    assert sims_a.equals(sims_b)
+    assert sims_a.shape == (30, 200)
+    assert sims_a.to_numpy().min() > 0.0
+    assert sims_a.to_numpy().max() < 1.0
+
+
+def test_simulate_prediction_market_rejects_out_of_range_probability():
+    from simulation import simulate_prediction_market
+
+    with pytest.raises(ValueError):
+        simulate_prediction_market(fundamental_probability=1.0, days=10, scenarios=5)

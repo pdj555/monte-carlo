@@ -27,7 +27,12 @@ from analysis import (
     enforce_portfolio_risk_budget,
 )
 from data import PriceDataError, fetch_prices
-from simulation import estimate_gbm_parameters, simulate_gbm, simulate_prices
+from simulation import (
+    estimate_gbm_parameters,
+    simulate_gbm,
+    simulate_prediction_market,
+    simulate_prices,
+)
 from viz import plot_distribution, plot_paths
 
 LOGGER = logging.getLogger(__name__)
@@ -169,9 +174,54 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model",
-        choices=("historical", "gbm"),
+        choices=("historical", "gbm", "prediction_market"),
         default="historical",
-        help="Simulation model: empirical distribution or geometric Brownian motion.",
+        help=(
+            "Simulation model: empirical historical bootstrap, geometric Brownian "
+            "motion, or prediction-market probabilities."
+        ),
+    )
+    parser.add_argument(
+        "--fundamental-probability",
+        type=float,
+        default=None,
+        help=(
+            "Required for --model prediction_market. Fundamental truth prior "
+            "for event probability (0-1)."
+        ),
+    )
+    parser.add_argument(
+        "--market-price",
+        type=float,
+        default=None,
+        help=(
+            "Optional current market-implied probability used as starting price "
+            "for --model prediction_market (0-1)."
+        ),
+    )
+    parser.add_argument(
+        "--fundamental-certainty",
+        type=_positive_float,
+        default=100.0,
+        help=(
+            "Pseudo-count confidence in --fundamental-probability for "
+            "--model prediction_market (higher = tighter truth prior)."
+        ),
+    )
+    parser.add_argument(
+        "--prob-mean-reversion",
+        type=float,
+        default=0.2,
+        help=(
+            "Daily pull toward latent truth in --model prediction_market "
+            "(0 = random walk around current level)."
+        ),
+    )
+    parser.add_argument(
+        "--prob-daily-volatility",
+        type=float,
+        default=0.03,
+        help="Noise scale for --model prediction_market probability paths.",
     )
     parser.add_argument(
         "--start",
@@ -364,6 +414,17 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         parser.error("--portfolio-risk-budget-pct must be non-negative")
     if float(args.annual_cash_yield) < 0:
         parser.error("--annual-cash-yield must be non-negative")
+    if float(args.prob_mean_reversion) < 0:
+        parser.error("--prob-mean-reversion must be non-negative")
+    if float(args.prob_daily_volatility) < 0:
+        parser.error("--prob-daily-volatility must be non-negative")
+    if args.model == "prediction_market":
+        if args.fundamental_probability is None:
+            parser.error("--fundamental-probability is required for --model prediction_market")
+        if not 0.0 < float(args.fundamental_probability) < 1.0:
+            parser.error("--fundamental-probability must be strictly between 0 and 1")
+        if args.market_price is not None and not 0.0 < float(args.market_price) < 1.0:
+            parser.error("--market-price must be strictly between 0 and 1")
     return args
 
 
@@ -555,31 +616,39 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         print(summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
 
     for ticker in tickers:
-        try:
-            prices = fetch_prices(
-                ticker,
-                start=args.start,
-                end=args.end,
-                offline_path=offline_path,
-                prefer_local=args.offline_only,
-                cache_dir=cache_dir,
-                refresh_cache=args.refresh_cache,
+        if args.model == "prediction_market":
+            current_price = float(
+                args.market_price
+                if args.market_price is not None
+                else args.fundamental_probability
             )
-        except PriceDataError as exc:
-            message = str(exc)
-            LOGGER.warning("[%s] %s", ticker, message)
-            errors.append({"ticker": ticker, "error": message})
-            continue
+            returns = pd.Series(dtype=float)
+        else:
+            try:
+                prices = fetch_prices(
+                    ticker,
+                    start=args.start,
+                    end=args.end,
+                    offline_path=offline_path,
+                    prefer_local=args.offline_only,
+                    cache_dir=cache_dir,
+                    refresh_cache=args.refresh_cache,
+                )
+            except PriceDataError as exc:
+                message = str(exc)
+                LOGGER.warning("[%s] %s", ticker, message)
+                errors.append({"ticker": ticker, "error": message})
+                continue
 
-        prices = prices.dropna()
-        returns = prices.pct_change().dropna()
-        if returns.empty:
-            message = "Not enough return data to run a simulation."
-            LOGGER.warning("[%s] %s", ticker, message)
-            errors.append({"ticker": ticker, "error": message})
-            continue
+            prices = prices.dropna()
+            returns = prices.pct_change().dropna()
+            if returns.empty:
+                message = "Not enough return data to run a simulation."
+                LOGGER.warning("[%s] %s", ticker, message)
+                errors.append({"ticker": ticker, "error": message})
+                continue
 
-        current_price = float(prices.iloc[-1])
+            current_price = float(prices.iloc[-1])
         current_prices[ticker] = current_price
         ticker_seed = (
             None
@@ -598,7 +667,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 shock_return=float(args.shock_return),
                 block_size=int(args.block_size),
             )
-        else:
+        elif args.model == "gbm":
             mu, sigma = estimate_gbm_parameters(returns)
             sims = simulate_gbm(
                 current_price=current_price,
@@ -610,6 +679,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 seed=ticker_seed,
                 shock_probability=float(args.shock_probability),
                 shock_return=float(args.shock_return),
+            )
+        else:
+            sims = simulate_prediction_market(
+                fundamental_probability=float(args.fundamental_probability),
+                current_price=float(current_price),
+                days=args.days,
+                scenarios=args.scenarios,
+                certainty=float(args.fundamental_certainty),
+                mean_reversion=float(args.prob_mean_reversion),
+                daily_volatility=float(args.prob_daily_volatility),
+                dt=args.dt,
+                seed=ticker_seed,
             )
 
         sims = sims.copy()

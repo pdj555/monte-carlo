@@ -653,3 +653,41 @@ def test_cli_minimal_mode_prints_compact_output(tmp_path, capsys):
     assert "AAPL: er=" in output
     assert "Summary for AAPL" not in output
     assert "PLAN" in output
+
+
+def test_cli_prediction_market_runs_without_price_data(tmp_path):
+    output_dir = tmp_path / "out"
+
+    result = run(
+        parse_args(
+            [
+                "--tickers",
+                "ELECTION_2028",
+                "--model",
+                "prediction_market",
+                "--fundamental-probability",
+                "0.64",
+                "--market-price",
+                "0.52",
+                "--days",
+                "30",
+                "--scenarios",
+                "300",
+                "--seed",
+                "42",
+                "--no-show",
+                "--no-plots",
+                "--output",
+                str(output_dir),
+            ]
+        )
+    )
+
+    summary = result["report"]["results"]["ELECTION_2028"]["summary"]
+    assert summary["mean"] > 0
+    assert result["simulations"].shape == (30, 300)
+
+
+def test_cli_prediction_market_requires_fundamental_probability():
+    with pytest.raises(SystemExit):
+        parse_args(["--model", "prediction_market"])
