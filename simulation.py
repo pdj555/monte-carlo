@@ -7,7 +7,12 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-__all__ = ["estimate_gbm_parameters", "simulate_prices", "simulate_gbm"]
+__all__ = [
+    "estimate_gbm_parameters",
+    "simulate_prices",
+    "simulate_gbm",
+    "simulate_prediction_market",
+]
 
 
 def _validate_shock_inputs(shock_probability: float, shock_return: float) -> None:
@@ -231,3 +236,58 @@ def simulate_gbm(
     index = pd.RangeIndex(start=1, stop=days + 1, name="day")
     columns = pd.RangeIndex(start=1, stop=scenarios + 1, name="scenario")
     return pd.DataFrame(cumulative, index=index, columns=columns)
+
+
+def simulate_prediction_market(
+    *,
+    fundamental_probability: float,
+    days: int,
+    scenarios: int,
+    current_price: float | None = None,
+    certainty: float = 100.0,
+    mean_reversion: float = 0.2,
+    daily_volatility: float = 0.03,
+    dt: float = 1.0,
+    seed: Optional[int] = None,
+) -> pd.DataFrame:
+    """Simulate prediction-market prices anchored to a fundamental truth prior."""
+
+    if days <= 0 or scenarios <= 0:
+        raise ValueError("days and scenarios must be positive integers")
+    if dt <= 0:
+        raise ValueError("dt must be positive")
+    if not 0.0 < fundamental_probability < 1.0:
+        raise ValueError("fundamental_probability must be strictly between 0 and 1")
+    if current_price is None:
+        current_price = fundamental_probability
+    if not 0.0 < current_price < 1.0:
+        raise ValueError("current_price must be strictly between 0 and 1")
+    if certainty <= 0:
+        raise ValueError("certainty must be positive")
+    if mean_reversion < 0:
+        raise ValueError("mean_reversion must be non-negative")
+    if daily_volatility < 0:
+        raise ValueError("daily_volatility must be non-negative")
+
+    alpha = fundamental_probability * certainty
+    beta = (1.0 - fundamental_probability) * certainty
+
+    rng = np.random.default_rng(seed)
+    latent_truth = rng.beta(alpha, beta, size=scenarios)
+
+    paths = np.empty((days, scenarios), dtype=float)
+    paths[0, :] = current_price
+
+    vol_scale = daily_volatility * np.sqrt(dt)
+    reversion_step = mean_reversion * dt
+    for day in range(1, days):
+        previous = paths[day - 1, :]
+        drift = reversion_step * (latent_truth - previous)
+        bounded_vol = vol_scale * np.sqrt(np.maximum(previous * (1.0 - previous), 1e-9))
+        innovation = rng.normal(loc=0.0, scale=bounded_vol, size=scenarios)
+        updated = previous + drift + innovation
+        paths[day, :] = np.clip(updated, 1e-4, 1.0 - 1e-4)
+
+    index = pd.RangeIndex(start=1, stop=days + 1, name="day")
+    columns = pd.RangeIndex(start=1, stop=scenarios + 1, name="scenario")
+    return pd.DataFrame(paths, index=index, columns=columns)
