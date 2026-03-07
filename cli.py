@@ -39,6 +39,138 @@ LOGGER = logging.getLogger(__name__)
 _FALLBACK_VERSION = "0.1.0"
 
 
+def _parser_error_if(
+    parser: argparse.ArgumentParser,
+    condition: bool,
+    message: str,
+) -> None:
+    if condition:
+        parser.error(message)
+
+
+def _print_ticker_summary(*, ticker: str, summary: pd.Series, minimal: bool) -> None:
+    if minimal:
+        expected_return = float(summary.get("expected_return", 0.0))
+        prob_up = float(summary.get("prob_above_current", 0.0))
+        var95 = float(summary.get("value_at_risk_95_pct", 0.0))
+        print(f"{ticker}: er={expected_return:.1%} up={prob_up:.1%} var95={var95:.1%}")
+        return
+
+    print(f"\nSummary for {ticker}")
+    print(summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
+
+
+def _print_portfolio_summary(summary: pd.Series, *, minimal: bool) -> None:
+    if minimal:
+        expected_return = float(summary.get("expected_return", 0.0))
+        prob_up = float(summary.get("prob_above_current", 0.0))
+        print(f"PORTFOLIO: er={expected_return:.1%} up={prob_up:.1%}")
+        return
+
+    print("\nSummary for EQUAL_WEIGHT_PORTFOLIO")
+    print(summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
+
+
+def _simulate_model(
+    *,
+    args: argparse.Namespace,
+    returns: pd.Series,
+    current_price: float,
+    ticker_seed: int | None,
+) -> pd.DataFrame:
+    if args.model == "historical":
+        return simulate_prices(
+            returns,
+            days=args.days,
+            scenarios=args.scenarios,
+            dt=args.dt,
+            seed=ticker_seed,
+            current_price=current_price,
+            shock_probability=float(args.shock_probability),
+            shock_return=float(args.shock_return),
+            block_size=int(args.block_size),
+        )
+    if args.model == "gbm":
+        mu, sigma = estimate_gbm_parameters(returns)
+        return simulate_gbm(
+            current_price=current_price,
+            mu=mu,
+            sigma=sigma,
+            days=args.days,
+            scenarios=args.scenarios,
+            dt=args.dt,
+            seed=ticker_seed,
+            shock_probability=float(args.shock_probability),
+            shock_return=float(args.shock_return),
+        )
+    return simulate_prediction_market(
+        fundamental_probability=float(args.fundamental_probability),
+        current_price=float(current_price),
+        days=args.days,
+        scenarios=args.scenarios,
+        certainty=float(args.fundamental_certainty),
+        mean_reversion=float(args.prob_mean_reversion),
+        daily_volatility=float(args.prob_daily_volatility),
+        dt=args.dt,
+        seed=ticker_seed,
+    )
+
+
+def _save_outputs(
+    *,
+    output_dir: Path,
+    summary_df: pd.DataFrame,
+    report: dict[str, object],
+    rankings: pd.DataFrame,
+    allocations: pd.DataFrame,
+    execution_plan: pd.DataFrame,
+    action_plan: dict[str, object],
+    combined: pd.DataFrame,
+    save_simulations: bool,
+) -> None:
+    summary_df.to_csv(output_dir / "summaries.csv", float_format="%.6g")
+    with (output_dir / "summaries.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary_df.to_dict(orient="index"), handle, indent=2)
+
+    with (output_dir / "report.json").open("w", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=2)
+
+    if not rankings.empty:
+        rankings.to_csv(output_dir / "rankings.csv", float_format="%.6g")
+    if not allocations.empty:
+        allocations.to_csv(output_dir / "allocations.csv", float_format="%.6g")
+    if not execution_plan.empty:
+        execution_plan.to_csv(output_dir / "execution_plan.csv", float_format="%.6g")
+
+    with (output_dir / "action_plan.md").open("w", encoding="utf-8") as handle:
+        handle.write("# Action Plan\n\n")
+        handle.write(f"- **Stance:** {action_plan['stance']}\n")
+        handle.write(f"- **Headline:** {action_plan['headline']}\n")
+        if action_plan["primary_pick"] is not None:
+            pick = action_plan["primary_pick"]
+            handle.write(
+                "- **Primary pick:** "
+                f"{pick['ticker']} (weight {pick['weight']:.1%}, score {pick['score']:.1f}, "
+                f"expected return {pick['expected_return']:.1%})\n"
+            )
+        if action_plan["avoid_list"]:
+            handle.write(f"- **Avoid:** {', '.join(action_plan['avoid_list'])}\n")
+        if action_plan.get("cash_weight", 0.0) > 0:
+            handle.write(f"- **Cash buffer:** {action_plan['cash_weight']:.1%}\n")
+
+        if not execution_plan.empty:
+            handle.write("\n## Execution Plan\n\n")
+            handle.write("| Ticker | Weight | Price | Target $ | Shares | Est. Cost | Cash Drift |\n")
+            handle.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n")
+            for ticker, row in execution_plan.iterrows():
+                handle.write(
+                    f"| {ticker} | {row['weight']:.1%} | {row['price']:.2f} | {row['target_dollars']:.2f} | {row['shares']:.4f} | {row['est_cost']:.2f} | {row['cash_drift']:.2f} |\n"
+                )
+
+    if save_simulations and not combined.empty:
+        combined.to_csv(output_dir / "simulations.csv.gz", compression="gzip")
+
+
 def _package_version() -> str:
     try:
         return metadata.version("monte-carlo-sim")
@@ -396,35 +528,77 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     args = parser.parse_args(raw_argv)
     if args.policy_file:
         args = _apply_policy_file(args, parser=parser, argv=raw_argv)
-    if not 0.0 <= float(args.shock_probability) <= 1.0:
-        parser.error("--shock-probability must be between 0 and 1")
-    if float(args.shock_return) <= -1.0:
-        parser.error("--shock-return must be greater than -1.0")
-    if args.max_loss_pct is not None and float(args.max_loss_pct) < 0:
-        parser.error("--max-loss-pct must be non-negative")
-    if args.min_prob_hit_target is not None and not 0.0 <= float(args.min_prob_hit_target) <= 1.0:
-        parser.error("--min-prob-hit-target must be between 0 and 1")
-    if args.max_prob_breach_loss is not None and not 0.0 <= float(args.max_prob_breach_loss) <= 1.0:
-        parser.error("--max-prob-breach-loss must be between 0 and 1")
-    if args.min_prob_hit_target is not None and args.target_return_pct is None:
-        parser.error("--min-prob-hit-target requires --target-return-pct")
-    if args.max_prob_breach_loss is not None and args.max_loss_pct is None:
-        parser.error("--max-prob-breach-loss requires --max-loss-pct")
-    if float(args.portfolio_risk_budget_pct) < 0:
-        parser.error("--portfolio-risk-budget-pct must be non-negative")
-    if float(args.annual_cash_yield) < 0:
-        parser.error("--annual-cash-yield must be non-negative")
-    if float(args.prob_mean_reversion) < 0:
-        parser.error("--prob-mean-reversion must be non-negative")
-    if float(args.prob_daily_volatility) < 0:
-        parser.error("--prob-daily-volatility must be non-negative")
+    _parser_error_if(
+        parser,
+        not 0.0 <= float(args.shock_probability) <= 1.0,
+        "--shock-probability must be between 0 and 1",
+    )
+    _parser_error_if(
+        parser,
+        float(args.shock_return) <= -1.0,
+        "--shock-return must be greater than -1.0",
+    )
+    _parser_error_if(
+        parser,
+        args.max_loss_pct is not None and float(args.max_loss_pct) < 0,
+        "--max-loss-pct must be non-negative",
+    )
+    _parser_error_if(
+        parser,
+        args.min_prob_hit_target is not None and not 0.0 <= float(args.min_prob_hit_target) <= 1.0,
+        "--min-prob-hit-target must be between 0 and 1",
+    )
+    _parser_error_if(
+        parser,
+        args.max_prob_breach_loss is not None and not 0.0 <= float(args.max_prob_breach_loss) <= 1.0,
+        "--max-prob-breach-loss must be between 0 and 1",
+    )
+    _parser_error_if(
+        parser,
+        args.min_prob_hit_target is not None and args.target_return_pct is None,
+        "--min-prob-hit-target requires --target-return-pct",
+    )
+    _parser_error_if(
+        parser,
+        args.max_prob_breach_loss is not None and args.max_loss_pct is None,
+        "--max-prob-breach-loss requires --max-loss-pct",
+    )
+    _parser_error_if(
+        parser,
+        float(args.portfolio_risk_budget_pct) < 0,
+        "--portfolio-risk-budget-pct must be non-negative",
+    )
+    _parser_error_if(
+        parser,
+        float(args.annual_cash_yield) < 0,
+        "--annual-cash-yield must be non-negative",
+    )
+    _parser_error_if(
+        parser,
+        float(args.prob_mean_reversion) < 0,
+        "--prob-mean-reversion must be non-negative",
+    )
+    _parser_error_if(
+        parser,
+        float(args.prob_daily_volatility) < 0,
+        "--prob-daily-volatility must be non-negative",
+    )
     if args.model == "prediction_market":
-        if args.fundamental_probability is None:
-            parser.error("--fundamental-probability is required for --model prediction_market")
-        if not 0.0 < float(args.fundamental_probability) < 1.0:
-            parser.error("--fundamental-probability must be strictly between 0 and 1")
-        if args.market_price is not None and not 0.0 < float(args.market_price) < 1.0:
-            parser.error("--market-price must be strictly between 0 and 1")
+        _parser_error_if(
+            parser,
+            args.fundamental_probability is None,
+            "--fundamental-probability is required for --model prediction_market",
+        )
+        _parser_error_if(
+            parser,
+            not 0.0 < float(args.fundamental_probability) < 1.0,
+            "--fundamental-probability must be strictly between 0 and 1",
+        )
+        _parser_error_if(
+            parser,
+            args.market_price is not None and not 0.0 < float(args.market_price) < 1.0,
+            "--market-price must be strictly between 0 and 1",
+        )
     return args
 
 
@@ -591,30 +765,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     horizon_years = float(args.days) * float(args.dt) / 252.0
     benchmark_return_pct = (1.0 + float(args.annual_cash_yield)) ** horizon_years - 1.0
 
-    def _print_ticker_summary(ticker: str, summary: pd.Series) -> None:
-        if args.minimal:
-            expected_return = float(summary.get("expected_return", 0.0))
-            prob_up = float(summary.get("prob_above_current", 0.0))
-            var95 = float(summary.get("value_at_risk_95_pct", 0.0))
-            print(
-                f"{ticker}: er={expected_return:.1%} "
-                f"up={prob_up:.1%} var95={var95:.1%}"
-            )
-            return
-
-        print(f"\nSummary for {ticker}")
-        print(summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
-
-    def _print_portfolio_summary(summary: pd.Series) -> None:
-        if args.minimal:
-            expected_return = float(summary.get("expected_return", 0.0))
-            prob_up = float(summary.get("prob_above_current", 0.0))
-            print(f"PORTFOLIO: er={expected_return:.1%} up={prob_up:.1%}")
-            return
-
-        print("\nSummary for EQUAL_WEIGHT_PORTFOLIO")
-        print(summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
-
     for ticker in tickers:
         if args.model == "prediction_market":
             current_price = float(
@@ -655,43 +805,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             if args.seed is None
             else int(args.seed) + zlib.adler32(ticker.encode("utf-8"))
         )
-        if args.model == "historical":
-            sims = simulate_prices(
-                returns,
-                days=args.days,
-                scenarios=args.scenarios,
-                dt=args.dt,
-                seed=ticker_seed,
-                current_price=current_price,
-                shock_probability=float(args.shock_probability),
-                shock_return=float(args.shock_return),
-                block_size=int(args.block_size),
-            )
-        elif args.model == "gbm":
-            mu, sigma = estimate_gbm_parameters(returns)
-            sims = simulate_gbm(
-                current_price=current_price,
-                mu=mu,
-                sigma=sigma,
-                days=args.days,
-                scenarios=args.scenarios,
-                dt=args.dt,
-                seed=ticker_seed,
-                shock_probability=float(args.shock_probability),
-                shock_return=float(args.shock_return),
-            )
-        else:
-            sims = simulate_prediction_market(
-                fundamental_probability=float(args.fundamental_probability),
-                current_price=float(current_price),
-                days=args.days,
-                scenarios=args.scenarios,
-                certainty=float(args.fundamental_certainty),
-                mean_reversion=float(args.prob_mean_reversion),
-                daily_volatility=float(args.prob_daily_volatility),
-                dt=args.dt,
-                seed=ticker_seed,
-            )
+        sims = _simulate_model(
+            args=args,
+            returns=returns,
+            current_price=current_price,
+            ticker_seed=ticker_seed,
+        )
 
         sims = sims.copy()
         sims.columns = pd.MultiIndex.from_product(
@@ -710,7 +829,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
         summaries[ticker] = summary
 
-        _print_ticker_summary(ticker, summary)
+        _print_ticker_summary(ticker=ticker, summary=summary, minimal=args.minimal)
 
         if args.ai_summary:
             try:
@@ -769,7 +888,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             current_prices=current_prices,
             benchmark_return_pct=benchmark_return_pct,
         )
-        _print_portfolio_summary(portfolio_summary)
+        _print_portfolio_summary(portfolio_summary, minimal=args.minimal)
 
     summary_df = pd.DataFrame(summaries).T if summaries else pd.DataFrame()
     rankings = rank_tickers(summary_df) if not summary_df.empty else pd.DataFrame()
@@ -897,49 +1016,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         }
 
     if output_dir is not None:
-        summary_df.to_csv(output_dir / "summaries.csv", float_format="%.6g")
-        with (output_dir / "summaries.json").open("w", encoding="utf-8") as handle:
-            json.dump(summary_df.to_dict(orient="index"), handle, indent=2)
+        _save_outputs(
+            output_dir=output_dir,
+            summary_df=summary_df,
+            report=report,
+            rankings=rankings,
+            allocations=allocations,
+            execution_plan=execution_plan,
+            action_plan=action_plan,
+            combined=combined,
+            save_simulations=args.save_simulations,
+        )
 
-        with (output_dir / "report.json").open("w", encoding="utf-8") as handle:
-            json.dump(report, handle, indent=2)
-
-        if not rankings.empty:
-            rankings.to_csv(output_dir / "rankings.csv", float_format="%.6g")
-
-        if not allocations.empty:
-            allocations.to_csv(output_dir / "allocations.csv", float_format="%.6g")
-
-        if not execution_plan.empty:
-            execution_plan.to_csv(output_dir / "execution_plan.csv", float_format="%.6g")
-
-        with (output_dir / "action_plan.md").open("w", encoding="utf-8") as handle:
-            handle.write(f"# Action Plan\n\n")
-            handle.write(f"- **Stance:** {action_plan['stance']}\n")
-            handle.write(f"- **Headline:** {action_plan['headline']}\n")
-            if action_plan["primary_pick"] is not None:
-                pick = action_plan["primary_pick"]
-                handle.write(
-                    "- **Primary pick:** "
-                    f"{pick['ticker']} (weight {pick['weight']:.1%}, score {pick['score']:.1f}, "
-                    f"expected return {pick['expected_return']:.1%})\n"
-                )
-            if action_plan["avoid_list"]:
-                handle.write(f"- **Avoid:** {', '.join(action_plan['avoid_list'])}\n")
-            if action_plan.get("cash_weight", 0.0) > 0:
-                handle.write(f"- **Cash buffer:** {action_plan['cash_weight']:.1%}\n")
-
-            if not execution_plan.empty:
-                handle.write("\n## Execution Plan\n\n")
-                handle.write("| Ticker | Weight | Price | Target $ | Shares | Est. Cost | Cash Drift |\n")
-                handle.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n")
-                for ticker, row in execution_plan.iterrows():
-                    handle.write(
-                        f"| {ticker} | {row['weight']:.1%} | {row['price']:.2f} | {row['target_dollars']:.2f} | {row['shares']:.4f} | {row['est_cost']:.2f} | {row['cash_drift']:.2f} |\n"
-                    )
-
-        if args.save_simulations and not combined.empty:
-            combined.to_csv(output_dir / "simulations.csv.gz", compression="gzip")
 
     if args.show and not args.no_plots and not combined.empty:
         plt.show()
