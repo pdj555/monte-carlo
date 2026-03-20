@@ -17,16 +17,18 @@ import pandas as pd
 
 from ai import OpenAIConfigurationError, OpenAIRequestError, generate_ai_summary
 from analysis import (
+    summarize_equal_weight_portfolio,
+    summarize_final_prices,
+)
+from data import PriceDataError, fetch_prices
+from decision import (
     apply_risk_guards,
     build_action_plan,
     build_execution_plan,
+    enforce_portfolio_risk_budget,
     rank_tickers,
     recommend_allocations,
-    summarize_equal_weight_portfolio,
-    summarize_final_prices,
-    enforce_portfolio_risk_budget,
 )
-from data import PriceDataError, fetch_prices
 from simulation import (
     estimate_gbm_parameters,
     simulate_gbm,

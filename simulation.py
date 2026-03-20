@@ -276,17 +276,17 @@ def simulate_prediction_market(
     latent_truth = rng.beta(alpha, beta, size=scenarios)
 
     paths = np.empty((days, scenarios), dtype=float)
-    paths[0, :] = current_price
+    previous = np.full(scenarios, current_price, dtype=float)
 
     vol_scale = daily_volatility * np.sqrt(dt)
     reversion_step = mean_reversion * dt
-    for day in range(1, days):
-        previous = paths[day - 1, :]
+    for day in range(days):
         drift = reversion_step * (latent_truth - previous)
         bounded_vol = vol_scale * np.sqrt(np.maximum(previous * (1.0 - previous), 1e-9))
         innovation = rng.normal(loc=0.0, scale=bounded_vol, size=scenarios)
         updated = previous + drift + innovation
-        paths[day, :] = np.clip(updated, 1e-4, 1.0 - 1e-4)
+        previous = np.clip(updated, 1e-4, 1.0 - 1e-4)
+        paths[day, :] = previous
 
     index = pd.RangeIndex(start=1, stop=days + 1, name="day")
     columns = pd.RangeIndex(start=1, stop=scenarios + 1, name="scenario")

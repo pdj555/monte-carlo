@@ -149,6 +149,24 @@ def test_simulate_prediction_market_is_bounded_and_reproducible():
     assert sims_a.to_numpy().max() < 1.0
 
 
+def test_simulate_prediction_market_first_row_is_first_future_step():
+    from simulation import simulate_prediction_market
+
+    sims = simulate_prediction_market(
+        fundamental_probability=0.8,
+        current_price=0.2,
+        days=3,
+        scenarios=2,
+        certainty=10_000.0,
+        mean_reversion=1.0,
+        daily_volatility=0.0,
+        seed=1,
+    )
+
+    assert sims.iloc[0].to_numpy() == pytest.approx(sims.iloc[1].to_numpy())
+    assert not np.allclose(sims.iloc[0].to_numpy(), 0.2)
+
+
 def test_simulate_prediction_market_rejects_out_of_range_probability():
     from simulation import simulate_prediction_market
 
