@@ -25,4 +25,4 @@ dev = ["flake8", "pytest"]
 monte-carlo = "cli:main"
 
 [tool.setuptools]
-py-modules = ["analysis", "ai", "cli", "data", "simulation", "viz"]
+py-modules = ["analysis", "ai", "cli", "data", "decision", "simulation", "viz"]
