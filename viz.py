@@ -24,7 +24,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-__all__ = ["plot_distribution", "plot_paths"]
+__all__ = ["plot_distribution", "plot_equity_curve", "plot_paths"]
 
 
 def _select_ticker(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
@@ -234,4 +234,33 @@ def plot_paths(
     ax.set_title(title or f"Simulated Paths for {ticker}")
     if prices_all.shape[1] > 1 or current is not None:
         ax.legend()
+    return fig
+
+
+def plot_equity_curve(
+    equity_curve: pd.DataFrame,
+    *,
+    title: Optional[str] = None,
+    palette: str = "tab10",
+) -> plt.Figure:
+    """Plot strategy and benchmark equity curves on one figure."""
+
+    if equity_curve.empty:
+        raise ValueError("equity_curve must contain at least one row")
+
+    fig, ax = plt.subplots()
+    colors = sns.color_palette(palette, n_colors=max(3, equity_curve.shape[1]))
+    for idx, column in enumerate(equity_curve.columns):
+        ax.plot(
+            equity_curve.index,
+            equity_curve[column].to_numpy(),
+            label=str(column).replace("_", " ").title(),
+            color=colors[idx],
+            linewidth=2.0,
+        )
+
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Equity")
+    ax.set_title(title or "Walk-Forward Equity Curve")
+    ax.legend()
     return fig
