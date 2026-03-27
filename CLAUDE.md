@@ -95,6 +95,28 @@ The codebase is organized into focused modules with clear separation of concerns
 - Both functions return `matplotlib.Figure` objects for flexible display/saving
 - Support MultiIndex columns for multi-ticker DataFrames
 
+**Programmatic SDK (`sdk.py`):**
+- `MonteCarloSDK` - Single-import, typed API for agent and programmatic use
+- `sdk.analyze()` - Full simulation + analysis for a single ticker, returns `TickerResult`
+- `sdk.analyze_many()` - Concurrent multi-ticker analysis with `ThreadPoolExecutor`
+- `sdk.portfolio()` - End-to-end portfolio construction: simulate, rank, allocate, plan
+- `sdk.screen()` - Categorize tickers into BUY/WATCH/AVOID with structured `ScreenResult`
+- `sdk.compare()` - Head-to-head ticker comparison with compact metrics
+- All results are dataclasses with `.to_dict()` and `.to_json()` for serialisation
+
+**MCP Server (`mcp_server.py`):**
+- Model Context Protocol server for direct AI agent integration
+- Exposes tools: `analyze_ticker`, `analyze_portfolio`, `screen_tickers`, `compare_tickers`
+- JSON-RPC 2.0 over stdin/stdout, zero external dependencies
+- Start with `python mcp_server.py` or configure in Claude Code MCP settings
+
+**Agentic Workflows (`agent_workflow.py`):**
+- `opportunity_scan()` - Scan a universe of tickers for the best opportunities
+- `risk_check()` - Deep risk assessment with multi-dimensional risk scoring
+- `what_if()` - Scenario analysis comparing historical vs GBM models
+- `rebalance_signal()` - Determine whether a portfolio needs rebalancing
+- Each workflow returns a structured, JSON-serialisable dataclass
+
 **Command-Line Interfaces:**
 - `monte-carlo` - Public entrypoint with `simulate` and `backtest` subcommands
 - `public_cli.py` - Public CLI parser and command runners
@@ -147,11 +169,42 @@ The CLI creates simulation DataFrames with MultiIndex columns:
 
 Extract single ticker with: `df.xs("AAPL", axis=1, level=0)`
 
+### Agent Integration
+
+**MCP Server** (recommended for AI agents):
+```json
+{
+    "mcpServers": {
+        "monte-carlo": {
+            "command": "python",
+            "args": ["mcp_server.py"],
+            "cwd": "/path/to/monte-carlo"
+        }
+    }
+}
+```
+
+**Python SDK** (recommended for programmatic use):
+```python
+from sdk import MonteCarloSDK
+sdk = MonteCarloSDK(offline_only=True)
+result = sdk.portfolio(["AAPL", "MSFT", "GOOGL"], days=252, scenarios=1000, seed=42)
+print(result.to_json(indent=2))
+```
+
+**Agentic Workflows** (recommended for complex agent pipelines):
+```python
+from agent_workflow import opportunity_scan, risk_check
+report = opportunity_scan(["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"])
+risk = risk_check("NVDA", scenarios=2000)
+```
+
 ### Testing Strategy
 
 Tests use pytest fixtures defined in `tests/conftest.py`:
 - Tests cover simulation edge cases (empty data, invalid parameters)
 - CLI tests verify argument parsing and output structure
+- SDK, MCP server, and agent workflow tests use mocked price data
 - Mock data used to avoid network dependencies during testing
 - `test_repo_config.py` and `test_installation.py` guard packaging — they'll fail if a new top-level module is missing from `pyproject.toml` or `vercel.json` `includeFiles`
 

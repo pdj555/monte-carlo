@@ -60,6 +60,10 @@ def rank_tickers(summaries: pd.DataFrame) -> pd.DataFrame:
     if "prob_beat_benchmark" in summaries.columns:
         ranking["prob_beat_benchmark"] = summaries["prob_beat_benchmark"]
 
+    # Composite score: return signal (100x) + probability tilt (40x)
+    # minus tail-risk penalty (100x) minus drawdown penalty (35x).
+    # Weights calibrated so a 10% expected return with 50% upside prob
+    # and 10% VaR scores roughly 5 -- a neutral-to-positive signal.
     ranking["score"] = (
         expected_return_signal * 100.0
         + (ranking["prob_above_current"] - 0.5) * 40.0
