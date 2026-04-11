@@ -26,6 +26,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.lock.txt
+          python -m pip install -e .
+
+      - name: Entrypoint smoke test
+        env:
+          MPLBACKEND: Agg
+        run: |
+          monte-carlo --help
+          monte-carlo simulate --help
+          monte-carlo backtest --help
 
       - name: Lint
         run: flake8 .

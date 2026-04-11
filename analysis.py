@@ -91,9 +91,13 @@ def summarize_final_prices(
             max(0.0, current_price - float(tail_99.mean())) if not tail_99.empty else 0.0
         )
         summary["value_at_risk_95_pct"] = float(summary["value_at_risk_95"] / current_price)
-        summary["expected_shortfall_95_pct"] = float(summary["expected_shortfall_95"] / current_price)
+        summary["expected_shortfall_95_pct"] = float(
+            summary["expected_shortfall_95"] / current_price
+        )
         summary["value_at_risk_99_pct"] = float(summary["value_at_risk_99"] / current_price)
-        summary["expected_shortfall_99_pct"] = float(summary["expected_shortfall_99"] / current_price)
+        summary["expected_shortfall_99_pct"] = float(
+            summary["expected_shortfall_99"] / current_price
+        )
 
         realized_returns = final_prices / current_price - 1.0
         if benchmark_return_pct is not None:

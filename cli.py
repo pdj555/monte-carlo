@@ -164,11 +164,17 @@ def _save_outputs(
 
         if not execution_plan.empty:
             handle.write("\n## Execution Plan\n\n")
-            handle.write("| Ticker | Weight | Price | Target $ | Shares | Est. Cost | Cash Drift |\n")
+            handle.write(
+                "| Ticker | Weight | Price | Target $ | Shares | Est. Cost | Cash Drift |\n"
+            )
             handle.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n")
             for ticker, row in execution_plan.iterrows():
                 handle.write(
-                    f"| {ticker} | {row['weight']:.1%} | {row['price']:.2f} | {row['target_dollars']:.2f} | {row['shares']:.4f} | {row['est_cost']:.2f} | {row['cash_drift']:.2f} |\n"
+                    (
+                        f"| {ticker} | {row['weight']:.1%} | {row['price']:.2f} | "
+                        f"{row['target_dollars']:.2f} | {row['shares']:.4f} | "
+                        f"{row['est_cost']:.2f} | {row['cash_drift']:.2f} |\n"
+                    )
                 )
 
     if save_simulations and not combined.empty:
@@ -549,12 +555,14 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     )
     _parser_error_if(
         parser,
-        args.min_prob_hit_target is not None and not 0.0 <= float(args.min_prob_hit_target) <= 1.0,
+        args.min_prob_hit_target is not None
+        and not 0.0 <= float(args.min_prob_hit_target) <= 1.0,
         "--min-prob-hit-target must be between 0 and 1",
     )
     _parser_error_if(
         parser,
-        args.max_prob_breach_loss is not None and not 0.0 <= float(args.max_prob_breach_loss) <= 1.0,
+        args.max_prob_breach_loss is not None
+        and not 0.0 <= float(args.max_prob_breach_loss) <= 1.0,
         "--max-prob-breach-loss must be between 0 and 1",
     )
     _parser_error_if(
@@ -1050,7 +1058,11 @@ def _render_legacy_simulation_output(result: dict[str, Any], args: argparse.Name
     report = result["report"]
     rankings_payload = report["rankings"]
     allocations_payload = report["allocations"]
-    rankings = pd.DataFrame.from_dict(rankings_payload, orient="index") if rankings_payload else pd.DataFrame()
+    rankings = (
+        pd.DataFrame.from_dict(rankings_payload, orient="index")
+        if rankings_payload
+        else pd.DataFrame()
+    )
     allocations = (
         pd.DataFrame.from_dict(allocations_payload, orient="index")
         if allocations_payload
@@ -1058,7 +1070,11 @@ def _render_legacy_simulation_output(result: dict[str, Any], args: argparse.Name
     )
 
     for ticker, row in summary_df.iterrows():
-        _print_ticker_summary(ticker=str(ticker), summary=row, minimal=bool(args.minimal))
+        _print_ticker_summary(
+            ticker=str(ticker),
+            summary=row,
+            minimal=bool(args.minimal),
+        )
         ai_text = report["results"].get(str(ticker), {}).get("ai_summary")
         if ai_text:
             print("\nAI summary")
@@ -1103,7 +1119,12 @@ def _render_legacy_simulation_output(result: dict[str, Any], args: argparse.Name
         print(f"- Cash buffer: {action_plan['cash_weight']:.1%}")
 
 
-def _render_public_simulation_output(result: dict[str, Any], *, details: bool, output: str | None) -> None:
+def _render_public_simulation_output(
+    result: dict[str, Any],
+    *,
+    details: bool,
+    output: str | None,
+) -> None:
     report = result["report"]
     action_plan = report["action_plan"]
 
@@ -1377,6 +1398,12 @@ def run(
             allow_fractional_shares=bool(args.allow_fractional_shares),
         )
 
+    policy = getattr(args, "policy", {})
+    policy_crc32 = None
+    if policy:
+        policy_bytes = json.dumps(policy, sort_keys=True).encode("utf-8")
+        policy_crc32 = f"{zlib.crc32(policy_bytes):08x}"
+
     report: dict[str, object] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "args": {
@@ -1391,17 +1418,17 @@ def run(
             }
             for ticker in summaries
         },
-        "portfolio_summary": (portfolio_summary.to_dict() if portfolio_summary is not None else None),
+        "portfolio_summary": (
+            portfolio_summary.to_dict() if portfolio_summary is not None else None
+        ),
         "rankings": rankings.to_dict(orient="index") if not rankings.empty else {},
         "allocations": allocations.to_dict(orient="index") if not allocations.empty else {},
-        "execution_plan": execution_plan.to_dict(orient="index") if not execution_plan.empty else {},
-        "portfolio_risk_budget_pct": float(args.portfolio_risk_budget_pct),
-        "policy": getattr(args, "policy", {}),
-        "policy_crc32": (
-            f"{zlib.crc32(json.dumps(getattr(args, 'policy', {}), sort_keys=True).encode('utf-8')):08x}"
-            if getattr(args, "policy", None)
-            else None
+        "execution_plan": (
+            execution_plan.to_dict(orient="index") if not execution_plan.empty else {}
         ),
+        "portfolio_risk_budget_pct": float(args.portfolio_risk_budget_pct),
+        "policy": policy,
+        "policy_crc32": policy_crc32,
         "action_plan": action_plan,
         "errors": errors,
     }

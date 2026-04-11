@@ -616,8 +616,12 @@ def test_cli_applies_portfolio_risk_budget_scaling(tmp_path):
         )
     )
 
-    unconstrained_weight = sum(item["weight"] for item in unconstrained["report"]["allocations"].values())
-    constrained_weight = sum(item["weight"] for item in constrained["report"]["allocations"].values())
+    unconstrained_weight = sum(
+        item["weight"] for item in unconstrained["report"]["allocations"].values()
+    )
+    constrained_weight = sum(
+        item["weight"] for item in constrained["report"]["allocations"].values()
+    )
 
     assert constrained_weight < unconstrained_weight
     assert constrained["report"]["portfolio_risk_budget_pct"] == pytest.approx(0.01)
@@ -839,7 +843,10 @@ def test_cli_appends_tamper_evident_decision_journal(tmp_path):
     assert len(entries) == 2
     assert entries[0]["previous_chain_hash"] is None
     assert entries[1]["previous_chain_hash"] == entries[0]["chain_hash"]
-    assert second["report"]["journal"]["previous_chain_hash"] == first["report"]["journal"]["chain_hash"]
+    assert (
+        second["report"]["journal"]["previous_chain_hash"]
+        == first["report"]["journal"]["chain_hash"]
+    )
 
 
 def test_cli_minimal_mode_prints_compact_output(tmp_path, capsys):

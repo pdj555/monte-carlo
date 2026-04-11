@@ -17,10 +17,29 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         description="Run a single-ticker Monte Carlo simulation.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--ticker", default="AAPL", help="Stock ticker symbol to simulate.")
-    parser.add_argument("--days", type=int, default=365, help="Number of future trading days.")
-    parser.add_argument("--scenarios", type=int, default=10000, help="Number of simulated price paths.")
-    parser.add_argument("--dt", type=float, default=1.0, help="Time increment for each step.")
+    parser.add_argument(
+        "--ticker",
+        default="AAPL",
+        help="Stock ticker symbol to simulate.",
+    )
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=365,
+        help="Number of future trading days.",
+    )
+    parser.add_argument(
+        "--scenarios",
+        type=int,
+        default=10000,
+        help="Number of simulated price paths.",
+    )
+    parser.add_argument(
+        "--dt",
+        type=float,
+        default=1.0,
+        help="Time increment for each step.",
+    )
     return parser.parse_args(list(argv) if argv is not None else None)
 
 

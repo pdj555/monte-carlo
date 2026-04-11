@@ -248,7 +248,14 @@ def apply_risk_guards(
         reasons.append("; ".join(ticker_reasons))
 
     guarded["guardrail_reasons"] = reasons
-    failed_any = fail_expected | fail_prob | fail_var | fail_drawdown | fail_target | fail_loss_breach
+    failed_any = (
+        fail_expected
+        | fail_prob
+        | fail_var
+        | fail_drawdown
+        | fail_target
+        | fail_loss_breach
+    )
     guarded.loc[failed_any, "recommendation"] = "AVOID"
     return guarded
 
