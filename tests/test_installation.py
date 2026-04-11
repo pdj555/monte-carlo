@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _installed_entrypoint() -> str:
@@ -23,6 +26,17 @@ def _installed_entrypoint() -> str:
     return resolved
 
 
+def _run_entrypoint(entrypoint: str, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [entrypoint, *args],
+        capture_output=True,
+        check=False,
+        cwd=REPO_ROOT,
+        env={**os.environ, "MPLBACKEND": "Agg"},
+        text=True,
+    )
+
+
 def test_installed_entrypoint_serves_help_commands() -> None:
     entrypoint = _installed_entrypoint()
 
@@ -31,11 +45,53 @@ def test_installed_entrypoint_serves_help_commands() -> None:
         ["simulate", "--help"],
         ["backtest", "--help"],
     ):
-        completed = subprocess.run(
-            [entrypoint, *args],
-            capture_output=True,
-            check=False,
-            text=True,
-        )
+        completed = _run_entrypoint(entrypoint, *args)
         assert completed.returncode == 0, completed.stderr
         assert "monte-carlo" in completed.stdout
+
+
+def test_installed_entrypoint_runs_offline_simulate_and_backtest() -> None:
+    entrypoint = _installed_entrypoint()
+    sample_data = str(REPO_ROOT / "sample_data")
+
+    simulate = _run_entrypoint(
+        entrypoint,
+        "simulate",
+        "AAPL",
+        "--source",
+        "offline",
+        "--data-path",
+        sample_data,
+        "--days",
+        "5",
+        "--scenarios",
+        "10",
+        "--details",
+    )
+    assert simulate.returncode == 0, simulate.stderr
+    assert "Stance:" in simulate.stdout
+    assert "Ticker ranking" in simulate.stdout
+
+    backtest = _run_entrypoint(
+        entrypoint,
+        "backtest",
+        "AAPL",
+        "--source",
+        "offline",
+        "--data-path",
+        sample_data,
+        "--lookback",
+        "5",
+        "--hold",
+        "3",
+        "--rebalance",
+        "3",
+        "--top",
+        "1",
+        "--scenarios",
+        "10",
+        "--details",
+    )
+    assert backtest.returncode == 0, backtest.stderr
+    assert "Strategy return:" in backtest.stdout
+    assert "Backtest summary" in backtest.stdout

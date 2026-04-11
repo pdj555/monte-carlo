@@ -111,11 +111,12 @@ Use `--data-path` to point at a custom directory or a single CSV file.
 
 ## Migration Note
 
-The old `python cli.py`, `python backtest.py`, and `python MonteCarlo.py` entrypoints still work as deprecated wrappers. The preferred interface is `monte-carlo simulate|backtest`.
+Legacy script entrypoints remain available as deprecated compatibility wrappers.
 
 ## Architecture
 
-- `cli.py` - public root CLI plus legacy simulation wrapper
+- `public_cli.py` - public `monte-carlo simulate|backtest` parser and runners
+- `cli.py` - legacy simulation engine, compatibility facade, and deprecated wrapper
 - `backtest.py` - walk-forward engine plus legacy wrapper
 - `simulation.py` - vectorized simulation engines
 - `analysis.py` - summary statistics

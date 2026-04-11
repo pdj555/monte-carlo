@@ -35,6 +35,8 @@ jobs:
           monte-carlo --help
           monte-carlo simulate --help
           monte-carlo backtest --help
+          monte-carlo simulate AAPL --source offline --data-path sample_data --days 5 --scenarios 10
+          monte-carlo backtest AAPL --source offline --data-path sample_data --lookback 5 --hold 3 --rebalance 3 --top 1 --scenarios 10
 
       - name: Lint
         run: flake8 .
