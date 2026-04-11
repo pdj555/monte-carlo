@@ -89,10 +89,14 @@ The codebase is organized into focused modules with clear separation of concerns
 
 **Command-Line Interfaces:**
 - `monte-carlo` - Public entrypoint with `simulate` and `backtest` subcommands
-- `cli.py` - Public CLI implementation plus deprecated simulation wrapper helpers
+- `public_cli.py` - Public CLI parser and command runners
   - `build_public_parser()` defines the public argparse structure
-  - `run_public_simulate(args)` executes the new simulation surface
-  - `legacy_main()` preserves the old `python cli.py ...` flow
+  - `run_public_simulate(args)` executes the public simulation surface
+  - `main()` is the installed `monte-carlo` entrypoint
+- `simulate_cli.py` - Shared simulation workflow used by both CLI surfaces
+- `cli_shared.py` - Shared version, validation, and detailed-rendering helpers
+- `cli.py` - Deprecated compatibility facade for `python cli.py ...`
+  - `legacy_main()` preserves the old wrapper flow
 - `backtest.py` - Walk-forward engine plus deprecated wrapper entrypoint
 - `MonteCarlo.py` - Deprecated single-ticker compatibility wrapper
 

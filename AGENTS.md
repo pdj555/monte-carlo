@@ -3,7 +3,9 @@
 ## Project Structure & Module Organization
 
 - `public_cli.py`: public CLI implementation for `monte-carlo simulate|backtest`.
-- `cli.py`: legacy simulation engine, compatibility facade, plus deprecated wrapper helpers.
+- `simulate_cli.py`: shared simulation workflow used by public and legacy entrypoints.
+- `cli_shared.py`: shared parser and rendering helpers for CLI surfaces.
+- `cli.py`: deprecated simulation wrapper and compatibility facade.
 - `backtest.py`: walk-forward engine plus deprecated backtest wrapper.
 - `MonteCarlo.py`: legacy single-ticker script (kept for backwards compatibility).
 - `simulation.py`: vectorized simulation engines (`simulate_prices`, `simulate_gbm`).

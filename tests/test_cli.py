@@ -35,6 +35,16 @@ def test_public_parse_args_defaults_to_aapl():
     assert args.tickers == ["AAPL"]
 
 
+def test_public_main_without_subcommand_prints_help_hint(capsys):
+    exit_code = main([])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "simulate" in captured.out
+    assert "backtest" in captured.out
+    assert "Choose `simulate` for current ideas" in captured.out
+
+
 def test_public_parse_args_rejects_unknown_source():
     with pytest.raises(SystemExit):
         parse_public_args(["simulate", "AAPL", "--source", "sideways"])

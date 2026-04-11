@@ -22,7 +22,7 @@ dependencies = [
 dev = ["flake8", "pytest"]
 
 [project.scripts]
-monte-carlo = "cli:main"
+monte-carlo = "public_cli:main"
 
 [tool.setuptools]
-py-modules = ["analysis", "ai", "backtest", "cli", "data", "decision", "public_cli", "simulation", "viz"]
+py-modules = ["analysis", "ai", "backtest", "cli", "cli_shared", "data", "decision", "public_cli", "simulate_cli", "simulation", "viz"]

@@ -50,6 +50,16 @@ def test_installed_entrypoint_serves_help_commands() -> None:
         assert "monte-carlo" in completed.stdout
 
 
+def test_installed_entrypoint_without_subcommand_prints_help_hint() -> None:
+    entrypoint = _installed_entrypoint()
+
+    completed = _run_entrypoint(entrypoint)
+    assert completed.returncode == 1, completed.stderr
+    assert "simulate" in completed.stdout
+    assert "backtest" in completed.stdout
+    assert "Choose `simulate` for current ideas" in completed.stdout
+
+
 def test_installed_entrypoint_runs_offline_simulate_and_backtest() -> None:
     entrypoint = _installed_entrypoint()
     sample_data = str(REPO_ROOT / "sample_data")
@@ -95,3 +105,8 @@ def test_installed_entrypoint_runs_offline_simulate_and_backtest() -> None:
     assert backtest.returncode == 0, backtest.stderr
     assert "Strategy return:" in backtest.stdout
     assert "Backtest summary" in backtest.stdout
+
+
+def test_pyproject_console_script_points_to_public_cli() -> None:
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'monte-carlo = "public_cli:main"' in text

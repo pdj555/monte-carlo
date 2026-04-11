@@ -10,7 +10,13 @@ from typing import Any, Iterable, Optional
 import pandas as pd
 
 import backtest as backtest_cli
-import cli as legacy_cli
+from cli_shared import (
+    non_negative_int,
+    package_version,
+    positive_int,
+    render_detailed_simulation_tables,
+)
+from simulate_cli import maybe_show_simulation_plots, run as run_simulation
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,10 +32,10 @@ def build_public_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {legacy_cli._package_version()}",
+        version=f"%(prog)s {package_version()}",
     )
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command")
 
     simulate_parser = subparsers.add_parser(
         "simulate",
@@ -43,13 +49,13 @@ def build_public_parser() -> argparse.ArgumentParser:
     )
     simulate_parser.add_argument(
         "--days",
-        type=legacy_cli._positive_int,
+        type=positive_int,
         default=252,
         help="Trading days to simulate into the future.",
     )
     simulate_parser.add_argument(
         "--scenarios",
-        type=legacy_cli._positive_int,
+        type=positive_int,
         default=1000,
         help="Number of Monte Carlo paths to run per ticker.",
     )
@@ -61,7 +67,7 @@ def build_public_parser() -> argparse.ArgumentParser:
     )
     simulate_parser.add_argument(
         "--seed",
-        type=legacy_cli._non_negative_int,
+        type=non_negative_int,
         default=None,
         help="Random seed for reproducible runs.",
     )
@@ -106,25 +112,25 @@ def build_public_parser() -> argparse.ArgumentParser:
     )
     backtest_parser.add_argument(
         "--lookback",
-        type=legacy_cli._positive_int,
+        type=positive_int,
         default=60,
         help="Trading days of history to use before each rebalance.",
     )
     backtest_parser.add_argument(
         "--hold",
-        type=legacy_cli._positive_int,
+        type=positive_int,
         default=20,
         help="Trading days to hold each position after a rebalance.",
     )
     backtest_parser.add_argument(
         "--rebalance",
-        type=legacy_cli._positive_int,
+        type=positive_int,
         default=20,
         help="Trading days between rebalances.",
     )
     backtest_parser.add_argument(
         "--top",
-        type=legacy_cli._positive_int,
+        type=positive_int,
         default=1,
         help="Number of ranked tickers to hold after each rebalance.",
     )
@@ -136,13 +142,13 @@ def build_public_parser() -> argparse.ArgumentParser:
     )
     backtest_parser.add_argument(
         "--scenarios",
-        type=legacy_cli._positive_int,
+        type=positive_int,
         default=1000,
         help="Number of Monte Carlo paths to run at each rebalance.",
     )
     backtest_parser.add_argument(
         "--seed",
-        type=legacy_cli._non_negative_int,
+        type=non_negative_int,
         default=None,
         help="Random seed for reproducible runs.",
     )
@@ -177,7 +183,7 @@ def parse_public_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespac
     """Return parsed arguments for the public CLI."""
 
     args = build_public_parser().parse_args(list(argv) if argv is not None else None)
-    if not args.tickers:
+    if getattr(args, "command", None) and not args.tickers:
         args.tickers = ["AAPL"]
     return args
 
@@ -319,7 +325,7 @@ def _render_public_simulation_output(
             if allocations_payload
             else pd.DataFrame()
         )
-        legacy_cli._render_detailed_simulation_tables(
+        render_detailed_simulation_tables(
             summary_df,
             portfolio_summary,
             rankings,
@@ -361,13 +367,13 @@ def run_public_simulate(args: argparse.Namespace) -> dict[str, Any]:
     """Execute the simplified simulate command."""
 
     legacy_args = _build_public_simulate_legacy_args(args)
-    result = legacy_cli.run(legacy_args, render=False, display_plots=False)
+    result = run_simulation(legacy_args, render=False, display_plots=False)
     _render_public_simulation_output(
         result,
         details=bool(args.details),
         output=args.output,
     )
-    legacy_cli._maybe_show_simulation_plots(legacy_args, result)
+    maybe_show_simulation_plots(legacy_args, result)
     return result
 
 
@@ -387,7 +393,14 @@ def run_public_backtest(args: argparse.Namespace) -> dict[str, pd.DataFrame | pd
 def main(argv: Optional[Iterable[str]] = None) -> int:
     """Entrypoint for the public ``monte-carlo`` command."""
 
-    args = parse_public_args(argv)
+    parser = build_public_parser()
+    args = parser.parse_args(list(argv) if argv is not None else None)
+    if args.command is None:
+        parser.print_help()
+        print("\nChoose `simulate` for current ideas or `backtest` for historical validation.")
+        return 1
+    if not args.tickers:
+        args.tickers = ["AAPL"]
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     try:

@@ -13,7 +13,10 @@ The public interface is the `monte-carlo` command with `simulate` and `backtest`
 
 The project is structured into focused modules:
 
-* **`cli.py`**: Public CLI implementation for `monte-carlo simulate|backtest`, plus deprecated simulation wrapper helpers.
+* **`public_cli.py`**: Public CLI implementation for `monte-carlo simulate|backtest`.
+* **`simulate_cli.py`**: Shared simulation workflow used by public and legacy entrypoints.
+* **`cli_shared.py`**: Shared parser and rendering helpers for CLI surfaces.
+* **`cli.py`**: Deprecated simulation wrapper and compatibility facade.
 * **`backtest.py`**: Walk-forward validation engine and deprecated backtest wrapper.
 * **`MonteCarlo.py`**: Deprecated single-ticker compatibility wrapper.
 * **`simulation.py`**: Core simulation logic (`simulate_prices` for historical bootstrap and `simulate_gbm` for GBM).

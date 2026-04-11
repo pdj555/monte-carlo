@@ -14,12 +14,12 @@ interface.
 
 ## Current Opportunities
 
-### 1. Keep shrinking legacy surface area
+### 1. Keep shrinking legacy wrapper surface area
 
-The public parser and command runners now live in `public_cli.py`, while
-`cli.py` still carries the legacy simulation engine and compatibility wrappers.
-The next useful step would be carving more legacy-only helpers into their own
-module so public-entrypoint reviews stay short and predictable.
+The installed entrypoint now runs through `public_cli.py`, with shared workflow
+living in `simulate_cli.py` and shared helpers in `cli_shared.py`. The next
+useful step would be trimming dead wrapper-era helpers from `cli.py` so the
+deprecated path stays obviously small.
 
 ### 2. Expand offline fixture coverage
 

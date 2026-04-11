@@ -116,7 +116,9 @@ Legacy script entrypoints remain available as deprecated compatibility wrappers.
 ## Architecture
 
 - `public_cli.py` - public `monte-carlo simulate|backtest` parser and runners
-- `cli.py` - legacy simulation engine, compatibility facade, and deprecated wrapper
+- `simulate_cli.py` - shared simulation workflow used by public and legacy entrypoints
+- `cli_shared.py` - shared parser and rendering helpers for CLI surfaces
+- `cli.py` - deprecated simulation wrapper and compatibility facade
 - `backtest.py` - walk-forward engine plus legacy wrapper
 - `simulation.py` - vectorized simulation engines
 - `analysis.py` - summary statistics
