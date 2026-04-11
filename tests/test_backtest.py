@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from backtest import parse_args, run, run_walk_forward_backtest
+from backtest import main, parse_args, run, run_walk_forward_backtest
 
 
 def _write_price_csv(path, ticker: str, closes: list[float]) -> None:
@@ -171,3 +171,38 @@ def test_backtest_cli_saves_summary_log_curve_and_plot(tmp_path):
     assert (output_dir / "rebalance_log.csv").exists()
     assert (output_dir / "equity_curve.csv").exists()
     assert (output_dir / "equity_curve.png").exists()
+
+
+def test_backtest_wrapper_warns_and_supports_legacy_flags(tmp_path, capsys):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _build_offline_dataset(data_dir)
+
+    exit_code = main(
+        [
+            "--tickers",
+            "AAPL,MSFT",
+            "--lookback-days",
+            "5",
+            "--holding-days",
+            "3",
+            "--rebalance-every",
+            "3",
+            "--top-k",
+            "1",
+            "--model",
+            "gbm",
+            "--scenarios",
+            "100",
+            "--seed",
+            "11",
+            "--offline-path",
+            str(data_dir),
+            "--offline-only",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Deprecated: use `monte-carlo backtest ...`" in captured.err
+    assert "strategy_total_return" in captured.out

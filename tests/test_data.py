@@ -143,3 +143,21 @@ def test_fetch_prices_rejects_invalid_dates(tmp_path):
 
     with pytest.raises(PriceDataError):
         fetch_prices("AAPL", start="not-a-date", offline_path=offline_dir, prefer_local=True)
+
+
+def test_fetch_prices_can_disable_local_fallback(tmp_path, monkeypatch):
+    offline_dir = tmp_path / "offline"
+    offline_dir.mkdir()
+    _write_sample_csv(offline_dir, "AAPL")
+
+    def _download(*_args, **_kwargs):
+        raise RuntimeError("network unavailable")
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    with pytest.raises(PriceDataError, match="Couldn't download price data"):
+        fetch_prices(
+            "AAPL",
+            offline_path=offline_dir,
+            allow_local_fallback=False,
+        )

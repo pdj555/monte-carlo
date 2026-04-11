@@ -8,7 +8,18 @@ import pytest
 
 matplotlib.use("Agg")
 
-from cli import main, parse_args, run  # noqa: E402
+import backtest as backtest_module  # noqa: E402
+import cli as cli_module  # noqa: E402
+import MonteCarlo  # noqa: E402
+from cli import (  # noqa: E402
+    legacy_main,
+    main,
+    parse_args,
+    parse_public_args,
+    run,
+    run_public_backtest,
+    run_public_simulate,
+)
 
 
 def _write_sample_csv(directory: str, ticker: str, trend: float) -> None:
@@ -16,6 +27,189 @@ def _write_sample_csv(directory: str, ticker: str, trend: float) -> None:
     close = 100 + trend * np.arange(len(dates))
     df = pd.DataFrame({"Date": dates, "Close": close})
     df.to_csv(f"{directory}/{ticker}.csv", index=False)
+
+
+def test_public_parse_args_defaults_to_aapl():
+    args = parse_public_args(["simulate"])
+    assert args.command == "simulate"
+    assert args.tickers == ["AAPL"]
+
+
+def test_public_parse_args_rejects_unknown_source():
+    with pytest.raises(SystemExit):
+        parse_public_args(["simulate", "AAPL", "--source", "sideways"])
+
+
+def test_public_simulate_matches_legacy_core_outputs(tmp_path, capsys):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
+    _write_sample_csv(str(data_dir), "MSFT", trend=0.3)
+
+    legacy = run(
+        parse_args(
+            [
+                "--tickers",
+                "AAPL,MSFT",
+                "--days",
+                "20",
+                "--scenarios",
+                "25",
+                "--seed",
+                "123",
+                "--no-show",
+                "--no-plots",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+            ]
+        ),
+        render=False,
+        display_plots=False,
+    )
+
+    public = run_public_simulate(
+        parse_public_args(
+            [
+                "simulate",
+                "AAPL",
+                "MSFT",
+                "--days",
+                "20",
+                "--scenarios",
+                "25",
+                "--seed",
+                "123",
+                "--source",
+                "offline",
+                "--data-path",
+                str(data_dir),
+            ]
+        )
+    )
+
+    output = capsys.readouterr().out
+    assert "Stance:" in output
+    assert "Ticker ranking" not in output
+    assert set(public["report"]["rankings"]) == set(legacy["report"]["rankings"])
+    assert public["report"]["action_plan"]["stance"] == legacy["report"]["action_plan"]["stance"]
+    assert public["report"]["portfolio_summary"] == legacy["report"]["portfolio_summary"]
+
+
+def test_public_backtest_matches_legacy_summary(tmp_path, capsys):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.4)
+    _write_sample_csv(str(data_dir), "MSFT", trend=0.2)
+
+    legacy = backtest_module.run(
+        backtest_module.parse_args(
+            [
+                "--tickers",
+                "AAPL,MSFT",
+                "--lookback-days",
+                "10",
+                "--holding-days",
+                "5",
+                "--rebalance-every",
+                "5",
+                "--top-k",
+                "1",
+                "--scenarios",
+                "100",
+                "--seed",
+                "11",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+            ]
+        ),
+        render=False,
+    )
+
+    public = run_public_backtest(
+        parse_public_args(
+            [
+                "backtest",
+                "AAPL",
+                "MSFT",
+                "--lookback",
+                "10",
+                "--hold",
+                "5",
+                "--rebalance",
+                "5",
+                "--top",
+                "1",
+                "--scenarios",
+                "100",
+                "--seed",
+                "11",
+                "--source",
+                "offline",
+                "--data-path",
+                str(data_dir),
+                "--details",
+            ]
+        )
+    )
+
+    output = capsys.readouterr().out
+    assert "Strategy return:" in output
+    assert public["summary"]["strategy_total_return"] == pytest.approx(
+        legacy["summary"]["strategy_total_return"]
+    )
+
+
+def test_public_simulate_saves_outputs_and_skips_plot_popups_by_default(tmp_path, capsys):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
+
+    output_dir = tmp_path / "out"
+    exit_code = main(
+        [
+            "simulate",
+            "AAPL",
+            "--days",
+            "20",
+            "--scenarios",
+            "25",
+            "--seed",
+            "123",
+            "--source",
+            "offline",
+            "--data-path",
+            str(data_dir),
+            "--output",
+            str(output_dir),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Saved outputs to" in captured.out
+    assert (output_dir / "AAPL_distribution.png").exists()
+    assert (output_dir / "AAPL_paths.png").exists()
+
+
+def test_public_simulate_reports_missing_offline_data(tmp_path, capsys):
+    missing_dir = tmp_path / "missing"
+    exit_code = main(
+        [
+            "simulate",
+            "AAPL",
+            "--source",
+            "offline",
+            "--data-path",
+            str(missing_dir),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "Skipped AAPL:" in output
+    assert "--data-path" in output
 
 
 def test_cli_runs_multi_ticker(tmp_path):
@@ -67,7 +261,7 @@ def test_cli_runs_multi_ticker(tmp_path):
     assert (output_dir / "action_plan.md").exists()
 
 
-def test_cli_main_respects_strict_mode(tmp_path):
+def test_legacy_cli_main_respects_strict_mode_and_warns(tmp_path, capsys):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
@@ -92,8 +286,34 @@ def test_cli_main_respects_strict_mode(tmp_path):
         "--offline-only",
     ]
 
-    assert main(base_args) == 0
-    assert main([*base_args, "--strict"]) == 1
+    assert legacy_main(base_args) == 0
+    assert legacy_main([*base_args, "--strict"]) == 1
+    assert "Deprecated: use `monte-carlo simulate ...`" in capsys.readouterr().err
+
+
+def test_montecarlo_wrapper_warns_and_translates_arguments(monkeypatch, capsys):
+    captured = {}
+
+    def _fake_run(args, *, render=True, display_plots=True):
+        captured["args"] = args
+        captured["render"] = render
+        captured["display_plots"] = display_plots
+        return {
+            "simulations": pd.DataFrame(),
+            "summaries": pd.DataFrame({"expected_return": [0.1]}, index=["AAPL"]),
+            "portfolio_summary": None,
+            "report": {"errors": []},
+        }
+
+    monkeypatch.setattr(cli_module, "run", _fake_run)
+
+    assert MonteCarlo.main(["--ticker", "AAPL", "--days", "10", "--scenarios", "50"]) == 0
+    stderr = capsys.readouterr().err
+    assert "Deprecated: use `monte-carlo simulate [TICKER ...]`" in stderr
+    assert captured["args"].tickers == "AAPL"
+    assert captured["args"].show is True
+    assert captured["args"].days == 10
+    assert captured["args"].scenarios == 50
 
 
 def test_cli_rejects_negative_seed():

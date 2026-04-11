@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 import zlib
 from pathlib import Path
 from typing import Iterable, Optional
@@ -43,7 +44,7 @@ def _non_negative_float(value: str) -> float:
 def _normalise_tickers(ticker_arg: str) -> list[str]:
     tickers = [ticker.strip().upper() for ticker in ticker_arg.split(",") if ticker.strip()]
     if not tickers:
-        raise ValueError("No valid tickers were supplied")
+        raise ValueError("No valid tickers were supplied. Provide at least one ticker symbol.")
     return list(dict.fromkeys(tickers))
 
 
@@ -83,6 +84,7 @@ def _load_price_history(
     end: str | None,
     offline_path: Path | None,
     offline_only: bool,
+    allow_local_fallback: bool,
 ) -> pd.DataFrame:
     price_frames: list[pd.Series] = []
     for ticker in tickers:
@@ -92,12 +94,16 @@ def _load_price_history(
             end=end,
             offline_path=offline_path,
             prefer_local=offline_only,
+            allow_local_fallback=allow_local_fallback,
         ).rename(ticker)
         price_frames.append(prices)
 
     combined = pd.concat(price_frames, axis=1, join="inner").dropna()
     if combined.empty:
-        raise ValueError("No overlapping price history was available for the requested tickers")
+        raise ValueError(
+            "No overlapping price history was available for the requested tickers. "
+            "Try a different date range or use tickers with shared history."
+        )
     return combined.sort_index()
 
 
@@ -180,6 +186,7 @@ def run_walk_forward_backtest(
     end: str | None = None,
     offline_path: Path | None = None,
     offline_only: bool = False,
+    allow_local_fallback: bool = True,
     min_expected_return: float = 0.0,
     min_prob_up: float = 0.5,
     max_var_95_pct: float = 0.25,
@@ -191,7 +198,10 @@ def run_walk_forward_backtest(
     """Run a deterministic walk-forward backtest over aligned price history."""
 
     if lookback_days <= 0 or holding_days <= 0 or rebalance_every <= 0 or top_k <= 0:
-        raise ValueError("lookback_days, holding_days, rebalance_every, and top_k must be positive")
+        raise ValueError(
+            "lookback_days, holding_days, rebalance_every, and top_k must be positive. "
+            "Use values greater than zero."
+        )
 
     price_history = _load_price_history(
         tickers=tickers,
@@ -199,13 +209,17 @@ def run_walk_forward_backtest(
         end=end,
         offline_path=offline_path,
         offline_only=offline_only,
+        allow_local_fallback=allow_local_fallback,
     )
 
     rebalance_positions = list(
         range(lookback_days, len(price_history) - holding_days, rebalance_every)
     )
     if not rebalance_positions:
-        raise ValueError("Not enough price history for the requested walk-forward configuration")
+        raise ValueError(
+            "Not enough price history for the requested walk-forward configuration. "
+            "Try smaller lookback/hold settings or provide a longer history."
+        )
 
     cash_period_return = (1.0 + annual_cash_yield) ** (holding_days / 252.0) - 1.0
     previous_weights = pd.Series(dtype=float)
@@ -398,7 +412,18 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     return args
 
 
-def run(args: argparse.Namespace) -> dict[str, pd.DataFrame | pd.Series]:
+def _render_backtest_output(result: dict[str, pd.DataFrame | pd.Series]) -> None:
+    summary = result["summary"]
+    if not isinstance(summary, pd.Series):
+        raise ValueError("summary output must be a pandas Series")
+    print(summary.to_frame(name="value").to_string(float_format=lambda value: f"{value:0.4f}"))
+
+
+def run(
+    args: argparse.Namespace,
+    *,
+    render: bool = True,
+) -> dict[str, pd.DataFrame | pd.Series]:
     """Execute the walk-forward backtest workflow."""
 
     tickers = _normalise_tickers(args.tickers)
@@ -416,6 +441,7 @@ def run(args: argparse.Namespace) -> dict[str, pd.DataFrame | pd.Series]:
         end=args.end,
         offline_path=offline_path,
         offline_only=bool(args.offline_only),
+        allow_local_fallback=bool(getattr(args, "allow_local_fallback", True)),
         min_expected_return=float(args.min_expected_return),
         min_prob_up=float(args.min_prob_up),
         max_var_95_pct=float(args.max_var_95_pct),
@@ -433,7 +459,8 @@ def run(args: argparse.Namespace) -> dict[str, pd.DataFrame | pd.Series]:
     if not isinstance(summary, pd.Series):
         raise ValueError("summary output must be a pandas Series")
 
-    print(summary.to_frame(name="value").to_string(float_format=lambda value: f"{value:0.4f}"))
+    if render:
+        _render_backtest_output(result)
 
     if args.output:
         _save_outputs(output_dir=Path(args.output).expanduser(), result=result)
@@ -441,8 +468,18 @@ def run(args: argparse.Namespace) -> dict[str, pd.DataFrame | pd.Series]:
     return result
 
 
-def main(argv: Optional[Iterable[str]] = None) -> int:
+def main(
+    argv: Optional[Iterable[str]] = None,
+    *,
+    show_deprecation: bool = True,
+) -> int:
     """Entrypoint for ``python backtest.py``."""
+
+    if show_deprecation:
+        print(
+            "Deprecated: use `monte-carlo backtest ...` for the simplified CLI.",
+            file=sys.stderr,
+        )
 
     args = parse_args(argv)
     logging.basicConfig(

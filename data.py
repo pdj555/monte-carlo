@@ -35,7 +35,10 @@ def _parse_date(value: Optional[str], *, label: str) -> Optional[pd.Timestamp]:
     try:
         return pd.to_datetime(value)
     except Exception as exc:
-        raise PriceDataError(f"Invalid {label} date '{value}': {exc}") from exc
+        raise PriceDataError(
+            f"{label.title()} date '{value}' is not valid. "
+            "Use YYYY-MM-DD, for example 2024-01-31."
+        ) from exc
 
 
 def _slice_prices(
@@ -44,7 +47,10 @@ def _slice_prices(
     start_ts = _parse_date(start, label="start")
     end_ts = _parse_date(end, label="end")
     if start_ts is not None and end_ts is not None and start_ts > end_ts:
-        raise PriceDataError("start date must be on or before end date")
+        raise PriceDataError(
+            "Start date must be on or before end date. "
+            "Choose an earlier start date or a later end date."
+        )
 
     prices = prices.sort_index()
     if start_ts is not None:
@@ -53,7 +59,8 @@ def _slice_prices(
         prices = prices.loc[:end_ts]
     if prices.empty:
         raise PriceDataError(
-            f"No price data available for the requested date range (start={start!r}, end={end!r})."
+            "No price data is available for the requested date range. "
+            "Try a wider range or remove the date filter."
         )
     return prices
 
@@ -64,10 +71,15 @@ def _load_prices_from_csv(path: Path) -> pd.Series:
     try:
         df = pd.read_csv(path)
     except Exception as exc:
-        raise PriceDataError(f"Failed to read CSV at '{path}': {exc}") from exc
+        raise PriceDataError(
+            f"Couldn't read CSV at '{path}'. "
+            "Check that the file exists and is a valid CSV."
+        ) from exc
 
     if df.empty:
-        raise PriceDataError(f"CSV at '{path}' is empty")
+        raise PriceDataError(
+            f"CSV at '{path}' is empty. Add rows with Date and Close columns."
+        )
 
     date_column = "Date" if "Date" in df.columns else df.columns[0]
     df[date_column] = pd.to_datetime(df[date_column], errors="coerce")
@@ -91,13 +103,17 @@ def _load_prices_from_csv(path: Path) -> pd.Series:
 
     if close_column is None:
         raise PriceDataError(
-            f"CSV at '{path}' must include a 'Close' (or 'Adj Close') column"
+            f"CSV at '{path}' is missing a Close column. "
+            "Add a 'Close' or 'Adj Close' column."
         )
 
     series = pd.to_numeric(df[close_column], errors="coerce").dropna()
     series.name = "Close"
     if series.empty:
-        raise PriceDataError(f"CSV at '{path}' does not contain usable close prices")
+        raise PriceDataError(
+            f"CSV at '{path}' does not contain usable close prices. "
+            "Check that the Close column has numeric values."
+        )
     return series
 
 
@@ -108,6 +124,7 @@ def fetch_prices(
     *,
     offline_path: Optional[Path | str] = None,
     prefer_local: bool = False,
+    allow_local_fallback: bool = True,
     cache_dir: Optional[Path | str] = None,
     refresh_cache: bool = False,
 ) -> pd.Series:
@@ -128,6 +145,9 @@ def fetch_prices(
         ``sample_data/{ticker}.csv`` relative to this module.
     prefer_local : bool, optional
         When ``True`` skip network requests entirely and use local CSV data.
+    allow_local_fallback : bool, optional
+        When ``False`` do not fall back to local CSV files after a failed
+        network request.
     cache_dir : pathlib.Path or str, optional
         Directory used to cache downloaded CSV data keyed by ticker. When a
         cached file exists it is used before attempting network access. When
@@ -147,7 +167,7 @@ def fetch_prices(
         If the ticker is invalid or data cannot be retrieved after retries.
     """
     if not isinstance(ticker, str) or not ticker.strip():
-        raise PriceDataError("Ticker must be a non-empty string")
+        raise PriceDataError("Ticker must be a non-empty string. Provide at least one symbol.")
     raw_ticker = ticker.strip()
     ticker = raw_ticker.upper()
 
@@ -171,7 +191,8 @@ def fetch_prices(
                 close = data.get("Close")
                 if close is None or close.empty:
                     raise PriceDataError(
-                        f"No price data returned for ticker '{ticker}'"
+                        f"No price data was returned for '{ticker}'. "
+                        "Check the symbol and try again."
                     )
                 close = close.sort_index()
                 close.index.name = "Date"
@@ -189,6 +210,18 @@ def fetch_prices(
                 attempts += 1
                 if attempts < 3:
                     time.sleep(2 ** (attempts - 1))
+
+    if not allow_local_fallback and not prefer_local:
+        if last_error is None:
+            raise PriceDataError(
+                f"Couldn't download price data for '{ticker}'. "
+                "Try again later or switch to local CSV data."
+            )
+        raise PriceDataError(
+            f"Couldn't download price data for '{ticker}'. "
+            f"Last network error: {type(last_error).__name__}: {last_error}. "
+            "Try again later or switch to local CSV data."
+        )
 
     # If online retrieval fails or local data is preferred, attempt to load CSV
     local_candidates: list[Path] = []
@@ -225,11 +258,13 @@ def fetch_prices(
     attempted = ", ".join(str(path) for path in local_candidates)
     if last_error is None:
         raise PriceDataError(
-            f"Failed to fetch price data for '{ticker}': offline CSV not found. "
-            f"Tried: {attempted}"
+            f"Couldn't load price data for '{ticker}' from local CSVs. "
+            f"Use --data-path to point at a directory containing '{ticker}.csv', "
+            f"or switch --source to auto or online. Tried: {attempted}"
         )
     raise PriceDataError(
-        f"Failed to fetch price data for '{ticker}'. "
+        f"Couldn't load price data for '{ticker}'. "
         f"Last network error: {type(last_error).__name__}: {last_error}. "
-        f"Tried local CSVs: {attempted}"
+        f"Use --data-path to point at a directory containing '{ticker}.csv', "
+        f"or switch --source to auto or online. Tried: {attempted}"
     )

@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import logging
+import sys
 import zlib
 from datetime import datetime, timezone
 from importlib import metadata
@@ -15,6 +16,7 @@ from typing import Any, Iterable, Optional
 import matplotlib.pyplot as plt
 import pandas as pd
 
+import backtest as backtest_cli
 from ai import OpenAIConfigurationError, OpenAIRequestError, generate_ai_summary
 from analysis import (
     summarize_equal_weight_portfolio,
@@ -604,6 +606,269 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     return args
 
 
+def build_public_parser() -> argparse.ArgumentParser:
+    """Create the simplified public CLI parser."""
+
+    parser = argparse.ArgumentParser(
+        prog="monte-carlo",
+        description="Monte Carlo tools for current ideas and historical validation.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {_package_version()}",
+    )
+
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    simulate_parser = subparsers.add_parser(
+        "simulate",
+        help="Rank current opportunities from simulated future paths.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    simulate_parser.add_argument(
+        "tickers",
+        nargs="*",
+        help="Ticker symbols to simulate. Defaults to AAPL when omitted.",
+    )
+    simulate_parser.add_argument(
+        "--days",
+        type=_positive_int,
+        default=252,
+        help="Trading days to simulate into the future.",
+    )
+    simulate_parser.add_argument(
+        "--scenarios",
+        type=_positive_int,
+        default=1000,
+        help="Number of Monte Carlo paths to run per ticker.",
+    )
+    simulate_parser.add_argument(
+        "--model",
+        choices=("historical", "gbm"),
+        default="historical",
+        help="Simulation model to use.",
+    )
+    simulate_parser.add_argument(
+        "--seed",
+        type=_non_negative_int,
+        default=None,
+        help="Random seed for reproducible runs.",
+    )
+    simulate_parser.add_argument(
+        "--source",
+        choices=("auto", "offline", "online"),
+        default="auto",
+        help="Where to load price data from.",
+    )
+    simulate_parser.add_argument(
+        "--data-path",
+        type=str,
+        default=None,
+        help="Directory or CSV file for local price data.",
+    )
+    simulate_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Directory where reports and plots are saved.",
+    )
+    simulate_parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Display plots after the run finishes.",
+    )
+    simulate_parser.add_argument(
+        "--details",
+        action="store_true",
+        help="Print tables and secondary metrics.",
+    )
+
+    backtest_parser = subparsers.add_parser(
+        "backtest",
+        help="Validate the process with walk-forward backtesting.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    backtest_parser.add_argument(
+        "tickers",
+        nargs="*",
+        help="Ticker symbols to evaluate. Defaults to AAPL when omitted.",
+    )
+    backtest_parser.add_argument(
+        "--lookback",
+        type=_positive_int,
+        default=60,
+        help="Trading days of history to use before each rebalance.",
+    )
+    backtest_parser.add_argument(
+        "--hold",
+        type=_positive_int,
+        default=20,
+        help="Trading days to hold each position after a rebalance.",
+    )
+    backtest_parser.add_argument(
+        "--rebalance",
+        type=_positive_int,
+        default=20,
+        help="Trading days between rebalances.",
+    )
+    backtest_parser.add_argument(
+        "--top",
+        type=_positive_int,
+        default=1,
+        help="Number of ranked tickers to hold after each rebalance.",
+    )
+    backtest_parser.add_argument(
+        "--model",
+        choices=("historical", "gbm"),
+        default="historical",
+        help="Simulation model to use at each rebalance.",
+    )
+    backtest_parser.add_argument(
+        "--scenarios",
+        type=_positive_int,
+        default=1000,
+        help="Number of Monte Carlo paths to run at each rebalance.",
+    )
+    backtest_parser.add_argument(
+        "--seed",
+        type=_non_negative_int,
+        default=None,
+        help="Random seed for reproducible runs.",
+    )
+    backtest_parser.add_argument(
+        "--source",
+        choices=("auto", "offline", "online"),
+        default="auto",
+        help="Where to load price data from.",
+    )
+    backtest_parser.add_argument(
+        "--data-path",
+        type=str,
+        default=None,
+        help="Directory or CSV file for local price data.",
+    )
+    backtest_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Directory where reports and plots are saved.",
+    )
+    backtest_parser.add_argument(
+        "--details",
+        action="store_true",
+        help="Print tables and secondary metrics.",
+    )
+
+    return parser
+
+
+def parse_public_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
+    """Return parsed arguments for the public CLI."""
+
+    args = build_public_parser().parse_args(list(argv) if argv is not None else None)
+    if not args.tickers:
+        args.tickers = ["AAPL"]
+    return args
+
+
+def _source_settings(source: str) -> tuple[bool, bool]:
+    """Map a public source mode to fetch settings."""
+
+    if source == "offline":
+        return True, True
+    if source == "online":
+        return False, False
+    return False, True
+
+
+def _public_tickers_to_csv_arg(tickers: list[str]) -> str:
+    return ",".join(tickers or ["AAPL"])
+
+
+def _build_public_simulate_legacy_args(args: argparse.Namespace) -> argparse.Namespace:
+    prefer_local, allow_local_fallback = _source_settings(str(args.source))
+    should_make_plots = bool(args.show or args.output)
+    return argparse.Namespace(
+        journal_file=None,
+        policy_file=None,
+        tickers=_public_tickers_to_csv_arg(list(args.tickers)),
+        days=int(args.days),
+        scenarios=int(args.scenarios),
+        max_paths=100,
+        no_plots=not should_make_plots,
+        dt=1.0,
+        block_size=1,
+        shock_probability=0.0,
+        shock_return=-0.15,
+        seed=args.seed,
+        model=str(args.model),
+        fundamental_probability=None,
+        market_price=None,
+        fundamental_certainty=100.0,
+        prob_mean_reversion=0.2,
+        prob_daily_volatility=0.03,
+        start=None,
+        end=None,
+        output=args.output,
+        cache_dir=None,
+        refresh_cache=False,
+        save_simulations=False,
+        offline_path=args.data_path,
+        offline_only=prefer_local,
+        allow_local_fallback=allow_local_fallback,
+        show=bool(args.show),
+        ai_summary=False,
+        ai_model="gpt-4o-mini",
+        annual_cash_yield=0.04,
+        min_expected_return=0.0,
+        min_prob_up=0.5,
+        portfolio_risk_budget_pct=0.02,
+        max_var_95_pct=0.25,
+        max_drawdown_q95_pct=None,
+        target_return_pct=None,
+        max_loss_pct=None,
+        min_prob_hit_target=None,
+        max_prob_breach_loss=None,
+        capital=None,
+        allow_fractional_shares=False,
+        minimal=False,
+        strict=False,
+        verbose=False,
+        details=bool(args.details),
+    )
+
+
+def _build_public_backtest_legacy_args(args: argparse.Namespace) -> argparse.Namespace:
+    prefer_local, allow_local_fallback = _source_settings(str(args.source))
+    return argparse.Namespace(
+        tickers=_public_tickers_to_csv_arg(list(args.tickers)),
+        lookback_days=int(args.lookback),
+        holding_days=int(args.hold),
+        rebalance_every=int(args.rebalance),
+        top_k=int(args.top),
+        model=str(args.model),
+        scenarios=int(args.scenarios),
+        seed=args.seed,
+        start=None,
+        end=None,
+        offline_path=args.data_path,
+        offline_only=prefer_local,
+        allow_local_fallback=allow_local_fallback,
+        output=args.output,
+        transaction_cost_bps=10.0,
+        annual_cash_yield=0.04,
+        min_expected_return=0.0,
+        min_prob_up=0.5,
+        max_var_95_pct=0.25,
+        max_drawdown_q95_pct=None,
+        portfolio_risk_budget_pct=0.02,
+        verbose=False,
+        details=bool(args.details),
+    )
+
+
 def _apply_policy_file(
     args: argparse.Namespace,
     *,
@@ -649,7 +914,7 @@ def _apply_policy_file(
 def _normalise_tickers(ticker_arg: str) -> list[str]:
     requested = [ticker.strip().upper() for ticker in ticker_arg.split(",") if ticker.strip()]
     if not requested:
-        raise ValueError("No valid tickers were supplied")
+        raise ValueError("No valid tickers were supplied. Provide at least one ticker symbol.")
 
     tickers: list[str] = []
     seen: set[str] = set()
@@ -737,8 +1002,189 @@ def _append_journal_entry(
     return entry
 
 
-def run(args: argparse.Namespace) -> dict[str, Any]:
-    """Execute the CLI workflow and return simulation artefacts."""
+def _ranking_display_columns(rankings: pd.DataFrame) -> list[str]:
+    preferred = [
+        "score",
+        "expected_return",
+        "prob_above_current",
+        "value_at_risk_95_pct",
+        "max_drawdown_q95",
+        "recommendation",
+        "guardrail_reasons",
+    ]
+    return [column for column in preferred if column in rankings.columns]
+
+
+def _render_detailed_simulation_tables(
+    summary_df: pd.DataFrame,
+    portfolio_summary: pd.Series | None,
+    rankings: pd.DataFrame,
+    allocations: pd.DataFrame,
+) -> None:
+    for ticker, row in summary_df.iterrows():
+        _print_ticker_summary(ticker=str(ticker), summary=row, minimal=False)
+
+    if portfolio_summary is not None:
+        _print_portfolio_summary(portfolio_summary, minimal=False)
+
+    if not rankings.empty:
+        print("\nTicker ranking")
+        print(
+            rankings.loc[:, _ranking_display_columns(rankings)].to_string(
+                float_format=lambda value: f"{value:0.3f}"
+            )
+        )
+
+    if not allocations.empty:
+        print("\nSuggested allocation")
+        print(
+            allocations.loc[:, ["weight", "score", "value_at_risk_95_pct"]].to_string(
+                float_format=lambda value: f"{value:0.3f}"
+            )
+        )
+
+
+def _render_legacy_simulation_output(result: dict[str, Any], args: argparse.Namespace) -> None:
+    summary_df = result["summaries"]
+    portfolio_summary = result["portfolio_summary"]
+    report = result["report"]
+    rankings_payload = report["rankings"]
+    allocations_payload = report["allocations"]
+    rankings = pd.DataFrame.from_dict(rankings_payload, orient="index") if rankings_payload else pd.DataFrame()
+    allocations = (
+        pd.DataFrame.from_dict(allocations_payload, orient="index")
+        if allocations_payload
+        else pd.DataFrame()
+    )
+
+    for ticker, row in summary_df.iterrows():
+        _print_ticker_summary(ticker=str(ticker), summary=row, minimal=bool(args.minimal))
+        ai_text = report["results"].get(str(ticker), {}).get("ai_summary")
+        if ai_text:
+            print("\nAI summary")
+            print(ai_text)
+
+    if portfolio_summary is not None:
+        _print_portfolio_summary(portfolio_summary, minimal=bool(args.minimal))
+
+    if not rankings.empty and not args.minimal:
+        print("\nTicker ranking")
+        print(
+            rankings.loc[:, _ranking_display_columns(rankings)].to_string(
+                float_format=lambda value: f"{value:0.3f}"
+            )
+        )
+
+    if not allocations.empty and not args.minimal:
+        print("\nSuggested allocation")
+        print(
+            allocations.loc[:, ["weight", "score", "value_at_risk_95_pct"]].to_string(
+                float_format=lambda value: f"{value:0.3f}"
+            )
+        )
+
+    action_plan = report["action_plan"]
+    if args.minimal:
+        print("\nPLAN")
+    else:
+        print("\nAction plan")
+    print(f"- Stance: {action_plan['stance']}")
+    print(f"- Headline: {action_plan['headline']}")
+    if action_plan["primary_pick"] is not None:
+        pick = action_plan["primary_pick"]
+        print(
+            "- Primary pick: "
+            f"{pick['ticker']} (weight {pick['weight']:.1%}, score {pick['score']:.1f}, "
+            f"expected return {pick['expected_return']:.1%})"
+        )
+    if action_plan["avoid_list"]:
+        print(f"- Avoid: {', '.join(action_plan['avoid_list'])}")
+    if action_plan.get("cash_weight", 0.0) > 0:
+        print(f"- Cash buffer: {action_plan['cash_weight']:.1%}")
+
+
+def _render_public_simulation_output(result: dict[str, Any], *, details: bool, output: str | None) -> None:
+    report = result["report"]
+    action_plan = report["action_plan"]
+
+    print(f"Stance: {action_plan['stance']}")
+    print(action_plan["headline"])
+
+    if action_plan["primary_pick"] is not None:
+        pick = action_plan["primary_pick"]
+        print(
+            f"Top idea: {pick['ticker']} at {pick['weight']:.1%} weight "
+            f"(expected return {pick['expected_return']:.1%})."
+        )
+    if action_plan["avoid_list"]:
+        print(f"Avoid: {', '.join(action_plan['avoid_list'])}")
+    if action_plan.get("cash_weight", 0.0) > 0:
+        print(f"Cash buffer: {action_plan['cash_weight']:.1%}")
+
+    for item in report["errors"]:
+        print(f"Skipped {item['ticker']}: {item['error']}")
+
+    if details:
+        summary_df = result["summaries"]
+        portfolio_summary = result["portfolio_summary"]
+        rankings_payload = report["rankings"]
+        allocations_payload = report["allocations"]
+        rankings = (
+            pd.DataFrame.from_dict(rankings_payload, orient="index")
+            if rankings_payload
+            else pd.DataFrame()
+        )
+        allocations = (
+            pd.DataFrame.from_dict(allocations_payload, orient="index")
+            if allocations_payload
+            else pd.DataFrame()
+        )
+        _render_detailed_simulation_tables(summary_df, portfolio_summary, rankings, allocations)
+
+    if output:
+        print(f"Saved outputs to {Path(output).expanduser()}")
+
+
+def _render_public_backtest_output(
+    result: dict[str, pd.DataFrame | pd.Series],
+    *,
+    details: bool,
+    output: str | None,
+) -> None:
+    summary = result["summary"]
+    if not isinstance(summary, pd.Series):
+        raise ValueError("summary output must be a pandas Series")
+
+    print(
+        "Strategy return: "
+        f"{float(summary['strategy_total_return']):.1%} "
+        f"({float(summary['strategy_annualized_return']):.1%} annualized)"
+    )
+    print(f"Max drawdown: {float(summary['strategy_max_drawdown']):.1%}")
+    print(f"vs equal weight: {float(summary['excess_return_vs_equal_weight']):.1%}")
+    print(f"vs cash: {float(summary['excess_return_vs_cash']):.1%}")
+
+    if details:
+        print("\nBacktest summary")
+        print(summary.to_frame(name="value").to_string(float_format=lambda value: f"{value:0.4f}"))
+
+    if output:
+        print(f"Saved outputs to {Path(output).expanduser()}")
+
+
+def _maybe_show_simulation_plots(args: argparse.Namespace, result: dict[str, Any]) -> None:
+    if bool(args.show) and not bool(args.no_plots) and not result["simulations"].empty:
+        plt.show()
+        plt.close("all")
+
+
+def run(
+    args: argparse.Namespace,
+    *,
+    render: bool = True,
+    display_plots: bool = True,
+) -> dict[str, Any]:
+    """Execute the legacy simulation workflow and return simulation artefacts."""
 
     tickers = _normalise_tickers(args.tickers)
     output_dir = Path(args.output).expanduser() if args.output else None
@@ -783,6 +1229,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     end=args.end,
                     offline_path=offline_path,
                     prefer_local=args.offline_only,
+                    allow_local_fallback=bool(getattr(args, "allow_local_fallback", True)),
                     cache_dir=cache_dir,
                     refresh_cache=args.refresh_cache,
                 )
@@ -795,7 +1242,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             prices = prices.dropna()
             returns = prices.pct_change().dropna()
             if returns.empty:
-                message = "Not enough return data to run a simulation."
+                message = (
+                    "Not enough return data was available to run a simulation. "
+                    "Try a longer price history."
+                )
                 LOGGER.warning("[%s] %s", ticker, message)
                 errors.append({"ticker": ticker, "error": message})
                 continue
@@ -831,8 +1281,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
         summaries[ticker] = summary
 
-        _print_ticker_summary(ticker=ticker, summary=summary, minimal=args.minimal)
-
         if args.ai_summary:
             try:
                 ai_text = generate_ai_summary(
@@ -849,8 +1297,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 errors.append({"ticker": ticker, "error": message})
             else:
                 ai_summaries[ticker] = ai_text
-                print("\nAI summary")
-                print(ai_text)
 
         if not args.no_plots:
             max_paths = None if args.max_paths == 0 else int(args.max_paths)
@@ -873,9 +1319,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 }
                 if ticker in ai_summaries:
                     ai_name = f"{ticker}_ai_summary.md"
-                    (output_dir / ai_name).write_text(
-                        ai_summaries[ticker] + "\n", encoding="utf-8"
-                    )
+                    (output_dir / ai_name).write_text(ai_summaries[ticker] + "\n", encoding="utf-8")
                     artefacts[ticker]["ai_summary"] = ai_name
 
             if not args.show:
@@ -890,7 +1334,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             current_prices=current_prices,
             benchmark_return_pct=benchmark_return_pct,
         )
-        _print_portfolio_summary(portfolio_summary, minimal=args.minimal)
 
     summary_df = pd.DataFrame(summaries).T if summaries else pd.DataFrame()
     rankings = rank_tickers(summary_df) if not summary_df.empty else pd.DataFrame()
@@ -933,48 +1376,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             capital=float(args.capital),
             allow_fractional_shares=bool(args.allow_fractional_shares),
         )
-
-    if not rankings.empty and not args.minimal:
-        print("\nTicker ranking")
-        display = rankings.loc[
-            :,
-            [
-                "score",
-                "expected_return",
-                "prob_above_current",
-                "value_at_risk_95_pct",
-                "max_drawdown_q95",
-                "recommendation",
-                "guardrail_reasons",
-            ],
-        ]
-        print(display.to_string(float_format=lambda v: f"{v:0.3f}"))
-
-    if not allocations.empty and not args.minimal:
-        print("\nSuggested allocation")
-        print(
-            allocations.loc[:, ["weight", "score", "value_at_risk_95_pct"]].to_string(
-                float_format=lambda v: f"{v:0.3f}"
-            )
-        )
-
-    if args.minimal:
-        print("\nPLAN")
-    else:
-        print("\nAction plan")
-    print(f"- Stance: {action_plan['stance']}")
-    print(f"- Headline: {action_plan['headline']}")
-    if action_plan["primary_pick"] is not None:
-        pick = action_plan["primary_pick"]
-        print(
-            "- Primary pick: "
-            f"{pick['ticker']} (weight {pick['weight']:.1%}, score {pick['score']:.1f}, "
-            f"expected return {pick['expected_return']:.1%})"
-        )
-    if action_plan["avoid_list"]:
-        print(f"- Avoid: {', '.join(action_plan['avoid_list'])}")
-    if action_plan.get("cash_weight", 0.0) > 0:
-        print(f"- Cash buffer: {action_plan['cash_weight']:.1%}")
 
     report: dict[str, object] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -1030,16 +1431,55 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             save_simulations=args.save_simulations,
         )
 
+    result = {
+        "simulations": combined,
+        "summaries": summary_df,
+        "portfolio_summary": portfolio_summary,
+        "report": report,
+    }
 
-    if args.show and not args.no_plots and not combined.empty:
-        plt.show()
-        plt.close("all")
+    if render:
+        _render_legacy_simulation_output(result, args)
+    if display_plots:
+        _maybe_show_simulation_plots(args, result)
 
-    return {"simulations": combined, "summaries": summary_df, "report": report}
+    return result
 
 
-def main(argv: Optional[Iterable[str]] = None) -> int:
-    """Entrypoint used by the ``python cli.py`` command."""
+def run_public_simulate(args: argparse.Namespace) -> dict[str, Any]:
+    """Execute the simplified simulate command."""
+
+    legacy_args = _build_public_simulate_legacy_args(args)
+    result = run(legacy_args, render=False, display_plots=False)
+    _render_public_simulation_output(
+        result,
+        details=bool(args.details),
+        output=args.output,
+    )
+    _maybe_show_simulation_plots(legacy_args, result)
+    return result
+
+
+def run_public_backtest(args: argparse.Namespace) -> dict[str, pd.DataFrame | pd.Series]:
+    """Execute the simplified backtest command."""
+
+    legacy_args = _build_public_backtest_legacy_args(args)
+    result = backtest_cli.run(legacy_args, render=False)
+    _render_public_backtest_output(
+        result,
+        details=bool(args.details),
+        output=args.output,
+    )
+    return result
+
+
+def legacy_main(argv: Optional[Iterable[str]] = None) -> int:
+    """Entrypoint used by the deprecated ``python cli.py`` wrapper."""
+
+    print(
+        "Deprecated: use `monte-carlo simulate ...` for the simplified CLI.",
+        file=sys.stderr,
+    )
 
     args = parse_args(argv)
 
@@ -1063,5 +1503,25 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     return 0
 
 
+def main(argv: Optional[Iterable[str]] = None) -> int:
+    """Entrypoint for the public ``monte-carlo`` command."""
+
+    args = parse_public_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+    try:
+        if args.command == "simulate":
+            result = run_public_simulate(args)
+            return 0 if not result["summaries"].empty else 1
+        if args.command == "backtest":
+            run_public_backtest(args)
+            return 0
+    except Exception as exc:
+        LOGGER.error("%s", exc)
+        return 2
+
+    return 2
+
+
 if __name__ == "__main__":  # pragma: no cover - CLI invocation
-    raise SystemExit(main())
+    raise SystemExit(legacy_main())

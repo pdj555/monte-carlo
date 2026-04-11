@@ -1,89 +1,97 @@
-"""Run Monte Carlo stock price simulations from the command line.
-
-This script is intentionally small. It simply wires together the helper
-modules that handle data retrieval, running the actual simulations and
-visualising the results. The command-line defaults mirror the old behaviour
-so it can be executed without any arguments.
-"""
+"""Deprecated single-ticker wrapper for the legacy Monte Carlo entrypoint."""
 
 from __future__ import annotations
 
 import argparse
-import matplotlib.pyplot as plt
+import logging
+import sys
+from typing import Iterable, Optional
 
-# Core functionality lives in these modules so they can be reused elsewhere
-from analysis import summarize_final_prices
-from data import fetch_prices, PriceDataError
-from simulation import simulate_prices
-from viz import plot_distribution, plot_paths
-
-# Use a consistent aesthetic for plots
-plt.style.use("ggplot")
+import cli
 
 
-def parse_args() -> argparse.Namespace:
-    """Return CLI options controlling the simulation."""
-    # The parser mirrors options previously set as module constants
+def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
+    """Return CLI options controlling the deprecated single-ticker wrapper."""
+
     parser = argparse.ArgumentParser(
-        description="Run a Monte Carlo stock price simulation."
+        description="Run a single-ticker Monte Carlo simulation.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument(
-        "--ticker",
-        default="AAPL",
-        help="Stock ticker symbol to simulate (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--days",
-        type=int,
-        default=365,
-        help="Number of future trading days (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--scenarios",
-        type=int,
-        default=10000,
-        help="Number of simulated price paths (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--dt",
-        type=float,
-        default=1.0,
-        help="Time increment for each step (default: %(default)s)",
-    )
-    return parser.parse_args()
+    parser.add_argument("--ticker", default="AAPL", help="Stock ticker symbol to simulate.")
+    parser.add_argument("--days", type=int, default=365, help="Number of future trading days.")
+    parser.add_argument("--scenarios", type=int, default=10000, help="Number of simulated price paths.")
+    parser.add_argument("--dt", type=float, default=1.0, help="Time increment for each step.")
+    return parser.parse_args(list(argv) if argv is not None else None)
 
 
-def main() -> None:
-    """Fetch data, run simulations, and plot the results."""
-    args = parse_args()
+def _build_legacy_args(args: argparse.Namespace) -> argparse.Namespace:
+    return argparse.Namespace(
+        journal_file=None,
+        policy_file=None,
+        tickers=str(args.ticker),
+        days=int(args.days),
+        scenarios=int(args.scenarios),
+        max_paths=100,
+        no_plots=False,
+        dt=float(args.dt),
+        block_size=1,
+        shock_probability=0.0,
+        shock_return=-0.15,
+        seed=None,
+        model="historical",
+        fundamental_probability=None,
+        market_price=None,
+        fundamental_certainty=100.0,
+        prob_mean_reversion=0.2,
+        prob_daily_volatility=0.03,
+        start=None,
+        end=None,
+        output=None,
+        cache_dir=None,
+        refresh_cache=False,
+        save_simulations=False,
+        offline_path=None,
+        offline_only=False,
+        allow_local_fallback=True,
+        show=True,
+        ai_summary=False,
+        ai_model="gpt-4o-mini",
+        annual_cash_yield=0.04,
+        min_expected_return=0.0,
+        min_prob_up=0.5,
+        portfolio_risk_budget_pct=0.02,
+        max_var_95_pct=0.25,
+        max_drawdown_q95_pct=None,
+        target_return_pct=None,
+        max_loss_pct=None,
+        min_prob_hit_target=None,
+        max_prob_breach_loss=None,
+        capital=None,
+        allow_fractional_shares=False,
+        minimal=False,
+        strict=False,
+        verbose=False,
+    )
 
-    # 1. Pull historical data then derive daily returns
+
+def main(argv: Optional[Iterable[str]] = None) -> int:
+    """Entrypoint for the deprecated ``python MonteCarlo.py`` command."""
+
+    print(
+        "Deprecated: use `monte-carlo simulate [TICKER ...]` for the simplified CLI. "
+        "Add `--show` when you want plots on screen.",
+        file=sys.stderr,
+    )
+    args = parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
     try:
-        prices = fetch_prices(args.ticker)
-    except PriceDataError as exc:
-        print(f"Error fetching prices: {exc}")
-        return
-
-    returns = prices.pct_change().dropna()
-    current_price = prices.iloc[-1]
-
-    # 2. Produce a matrix of simulated future prices
-    sims = simulate_prices(
-        returns, days=args.days, scenarios=args.scenarios, dt=args.dt, current_price=current_price
-    )
-
-    summary = summarize_final_prices(sims, current_price=current_price)
-    print("Simulation summary (final prices):")
-    print(summary.to_string(float_format=lambda value: f"{value:0.2f}"))
-
-    # 3. Display a histogram of where each scenario ends up
-    plot_distribution(sims, ticker=args.ticker, current_price=float(current_price))
-    plt.show()
-
-    # 4. Visualise a subset of simulated paths over time
-    plot_paths(sims, ticker=args.ticker, current_price=float(current_price))
-    plt.show()
+        result = cli.run(_build_legacy_args(args))
+    except Exception as exc:
+        logging.getLogger(__name__).error("%s", exc)
+        return 2
+    return 0 if not result["summaries"].empty else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
