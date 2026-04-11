@@ -10,6 +10,7 @@ matplotlib.use("Agg")
 
 import backtest as backtest_module  # noqa: E402
 import cli as cli_module  # noqa: E402
+import data  # noqa: E402
 import MonteCarlo  # noqa: E402
 from cli import legacy_main, parse_args, run  # noqa: E402
 from public_cli import (  # noqa: E402
@@ -57,6 +58,77 @@ def test_public_help_hides_none_and_false_defaults(argv, capsys):
     assert exc.value.code == 0
     assert "(default: None)" not in captured.out
     assert "(default: False)" not in captured.out
+
+
+@pytest.mark.parametrize("argv", [["simulate", "--help"], ["backtest", "--help"]])
+def test_public_help_explains_auto_source(argv, capsys):
+    with pytest.raises(SystemExit):
+        parse_public_args(argv)
+
+    captured = capsys.readouterr()
+    assert "auto tries live first" in captured.out
+    assert "local fallback" in captured.out
+
+
+def test_public_simulate_auto_source_handles_multiindex_download(monkeypatch, capsys):
+    dates = pd.date_range("2024-01-01", periods=40, freq="D")
+    columns = pd.MultiIndex.from_product([["Close"], ["AAPL"]])
+    downloaded = pd.DataFrame(
+        [[100.0 + idx] for idx in range(len(dates))],
+        index=dates,
+        columns=columns,
+    )
+
+    def _download(_ticker, start=None, end=None, progress=False):
+        assert progress is False
+        return downloaded
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    exit_code = main(["simulate", "AAPL", "--source", "auto", "--days", "5", "--scenarios", "10"])
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Stance:" in output
+
+
+def test_public_backtest_auto_source_handles_multiindex_download(monkeypatch, capsys):
+    dates = pd.date_range("2024-01-01", periods=40, freq="D")
+    columns = pd.MultiIndex.from_product([["Close"], ["AAPL"]])
+    downloaded = pd.DataFrame(
+        [[100.0 + idx] for idx in range(len(dates))],
+        index=dates,
+        columns=columns,
+    )
+
+    def _download(_ticker, start=None, end=None, progress=False):
+        assert progress is False
+        return downloaded
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    exit_code = main(
+        [
+            "backtest",
+            "AAPL",
+            "--source",
+            "auto",
+            "--lookback",
+            "10",
+            "--hold",
+            "5",
+            "--rebalance",
+            "5",
+            "--top",
+            "1",
+            "--scenarios",
+            "10",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Strategy return:" in output
 
 
 def test_public_simulate_matches_legacy_core_outputs(tmp_path, capsys):

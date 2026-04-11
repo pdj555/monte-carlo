@@ -117,6 +117,49 @@ def _load_prices_from_csv(path: Path) -> pd.Series:
     return series
 
 
+def _normalize_download_close(
+    close: pd.Series | pd.DataFrame,
+    *,
+    ticker: str,
+) -> pd.Series:
+    """Normalize yfinance close data into a single close-price series."""
+
+    if isinstance(close, pd.DataFrame):
+        normalized: pd.Series | pd.DataFrame = close
+        if isinstance(normalized.columns, pd.MultiIndex):
+            for level in (0, -1):
+                labels = normalized.columns.get_level_values(level)
+                if ticker in labels:
+                    normalized = normalized.xs(ticker, axis=1, level=level, drop_level=True)
+                    break
+        if isinstance(normalized, pd.DataFrame):
+            if ticker in normalized.columns:
+                normalized = normalized[ticker]
+            elif normalized.shape[1] == 1:
+                normalized = normalized.iloc[:, 0]
+        if isinstance(normalized, pd.DataFrame):
+            raise PriceDataError(
+                f"Price data for '{ticker}' came back in an unexpected shape. "
+                "Try again later or switch to local CSV data."
+            )
+        close = normalized
+
+    if not isinstance(close, pd.Series):
+        raise PriceDataError(
+            f"Price data for '{ticker}' came back in an unexpected format. "
+            "Try again later or switch to local CSV data."
+        )
+
+    series = pd.to_numeric(close, errors="coerce").dropna().sort_index()
+    series.name = "Close"
+    if series.empty:
+        raise PriceDataError(
+            f"No usable close prices were returned for '{ticker}'. "
+            "Try again later or switch to local CSV data."
+        )
+    return series
+
+
 def fetch_prices(
     ticker: str,
     start: Optional[str] = None,
@@ -194,7 +237,7 @@ def fetch_prices(
                         f"No price data was returned for '{ticker}'. "
                         "Check the symbol and try again."
                     )
-                close = close.sort_index()
+                close = _normalize_download_close(close, ticker=ticker)
                 close.index.name = "Date"
 
                 if cache_file is not None:

@@ -5,26 +5,29 @@ This project does two things:
 1. simulate forward outcomes for current ideas
 2. backtest the decision process on historical data
 
-The public interface is one command:
+There are two entrypoints:
 
 - `monte-carlo simulate` for current opportunities
 - `monte-carlo backtest` for walk-forward validation
+- `monte-carlo-ui` for a lean browser UI
 
 ## Install
 
 Python 3.9+ is required.
 
+CLI install:
+
 ```bash
 python3 -m pip install -e .
 ```
 
-After install, use the packaged command:
+Browser UI install:
 
 ```bash
-monte-carlo --help
+python3 -m pip install -e .[ui]
 ```
 
-For the browser UI:
+Quick start in the browser:
 
 ```bash
 monte-carlo-ui
@@ -33,10 +36,10 @@ monte-carlo-ui
 Then open [http://127.0.0.1:8000](http://127.0.0.1:8000). The app starts with
 the bundled AAPL demo so you land on a real decision instead of an empty page.
 
-For headless environments:
+Quick start in the CLI:
 
 ```bash
-export MPLBACKEND=Agg
+monte-carlo --help
 ```
 
 ## Workflow 1: simulate
@@ -137,6 +140,12 @@ The web UI keeps the happy path tiny:
 `Demo sample` opens instantly and stays deterministic. `Live first` starts
 online and falls back to local CSVs. `Local CSV` accepts a single file or a
 directory of `<TICKER>.csv` files with `Date` and `Close` columns.
+
+For headless CLI environments:
+
+```bash
+export MPLBACKEND=Agg
+```
 
 ## Migration Note
 

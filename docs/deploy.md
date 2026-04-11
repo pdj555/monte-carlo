@@ -1,14 +1,17 @@
-# Deploy
+# Deployment Notes
+
+These are operator notes from manual experiments. This repository does not yet
+ship maintained deployment config or CI coverage for Vercel or Fly.io.
 
 ## Vercel
 
-For local preview with the same Flask detection Vercel uses in deployment:
+For local preview with the same Flask detection Vercel uses:
 
 ```bash
 vercel dev
 ```
 
-To ship it:
+If you want to experiment with deployment:
 
 ```bash
 vercel
@@ -16,7 +19,7 @@ vercel
 
 ## Fly.io
 
-When you want a container host instead of serverless Flask:
+If you want to experiment with a container host instead of serverless Flask:
 
 ```bash
 fly launch --no-deploy

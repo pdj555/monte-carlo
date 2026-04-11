@@ -59,6 +59,23 @@ def test_fetch_prices_saves_cache_after_network(tmp_path, monkeypatch):
     pd.testing.assert_series_equal(prices, cached, check_freq=False)
 
 
+def test_fetch_prices_normalizes_multiindex_close_from_yfinance(monkeypatch):
+    dates = pd.date_range("2024-01-01", periods=4, freq="D")
+    columns = pd.MultiIndex.from_product([["Close"], ["AAPL"]])
+    downloaded = pd.DataFrame([[10.0], [11.0], [12.0], [13.0]], index=dates, columns=columns)
+
+    def _download(_ticker, start=None, end=None, progress=False):
+        assert progress is False
+        return downloaded
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    prices = fetch_prices("AAPL")
+    assert isinstance(prices, pd.Series)
+    assert prices.name == "Close"
+    assert prices.iloc[-1] == 13.0
+
+
 def test_fetch_prices_supports_offline_directory(tmp_path):
     offline_dir = tmp_path / "offline"
     offline_dir.mkdir()

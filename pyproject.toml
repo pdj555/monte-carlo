@@ -11,7 +11,6 @@ requires-python = ">=3.9"
 license = { file = "LICENSE" }
 authors = [{ name = "Preston Jones" }]
 dependencies = [
-  "Flask",
   "matplotlib",
   "numpy",
   "pandas",
@@ -21,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["flake8", "pytest"]
+ui = ["Flask"]
 
 [project.scripts]
 monte-carlo = "public_cli:main"

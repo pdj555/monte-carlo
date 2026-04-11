@@ -3,20 +3,42 @@
 from __future__ import annotations
 
 import base64
-import contextlib
 import io
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
-from flask import Flask, Response, render_template_string, request as flask_request  # noqa: E402
 
-from public_cli import parse_public_args, run_public_backtest, run_public_simulate  # noqa: E402
+from public_cli import (  # noqa: E402
+    execute_public_backtest,
+    execute_public_simulate,
+    format_public_backtest_output,
+    format_public_simulation_output,
+    parse_public_args,
+)
 from viz import plot_equity_curve, plot_paths  # noqa: E402
+
+try:
+    from flask import (  # noqa: E402
+        Flask,
+        Response,
+        render_template_string,
+        request as flask_request,
+    )
+except ModuleNotFoundError as exc:  # pragma: no cover - covered through entrypoint tests
+    Flask = None  # type: ignore[assignment]
+    Response = Any  # type: ignore[misc,assignment]
+    render_template_string = None  # type: ignore[assignment]
+    flask_request = None  # type: ignore[assignment]
+    _FLASK_IMPORT_ERROR: ModuleNotFoundError | None = exc
+else:
+    _FLASK_IMPORT_ERROR = None
 
 REPO_ROOT = Path(__file__).resolve().parent
 SAMPLE_DATA_DIR = REPO_ROOT / "sample_data"
@@ -29,7 +51,10 @@ CHOICES = {
 SOURCE_NOTES = {
     "demo": "Starts with the bundled sample so the first decision is immediate.",
     "auto": "Starts with live prices, then falls back to local CSVs.",
-    "local": "Use a CSV file or folder with Date and Close columns.",
+    "local": (
+        "Use one CSV, or a folder of <TICKER>.csv files, "
+        "each with Date and Close columns."
+    ),
 }
 STANCE_LABELS = {
     "RISK_ON": "Lean in",
@@ -37,6 +62,10 @@ STANCE_LABELS = {
     "DEFENSIVE": "Defensive",
     "NO_TRADE": "Stand aside",
 }
+FLASK_INSTALL_HINT = (
+    "Browser UI needs the optional UI extra. "
+    "Install `python3 -m pip install -e .[ui]`."
+)
 
 APP_CSS = """
 :root {
@@ -539,7 +568,7 @@ PAGE_TEMPLATE = """
           data-local-path
           {% if state.request.source != "local" %}hidden{% endif %}
         >
-          <span>Local CSV path</span>
+          <span>CSV file or folder</span>
           <input
             type="text"
             name="data_path"
@@ -650,9 +679,6 @@ class PageState:
     error: str | None = None
 
 
-app = Flask(__name__)
-
-
 def _coerce_choice(raw: str | None, *, group: str, default: str) -> str:
     value = (raw or "").strip().lower()
     return value if value in CHOICES[group] else default
@@ -742,8 +768,6 @@ def build_public_argv(ui_request: UIRequest) -> list[str]:
                 "10",
             ]
         )
-
-    argv.append("--details")
     return argv
 
 
@@ -756,17 +780,6 @@ def _encode_figure(fig: plt.Figure) -> str:
     fig.savefig(buffer, format="png", bbox_inches="tight")
     plt.close(fig)
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
-
-
-def _combined_output(
-    output_buffer: io.StringIO,
-    error_buffer: io.StringIO,
-) -> str:
-    return "\n\n".join(
-        part
-        for part in (output_buffer.getvalue().strip(), error_buffer.getvalue().strip())
-        if part
-    ).strip()
 
 
 def _simulate_chart_payload(result: dict[str, object]) -> tuple[str | None, str]:
@@ -962,15 +975,26 @@ def _build_backtest_state(
     )
 
 
-def _error_state(ui_request: UIRequest, message: str) -> PageState:
+def _friendly_runtime_message(ui_request: UIRequest, raw_message: str) -> str:
+    if ui_request.source == "auto":
+        return "Live prices weren’t available. Try again or switch to Demo sample or Local CSV."
+    return raw_message
+
+
+def _error_state(
+    ui_request: UIRequest,
+    summary: str,
+    *,
+    details_text: str | None = None,
+) -> PageState:
     return PageState(
         request=ui_request,
         source_note=SOURCE_NOTES[ui_request.source],
         eyebrow="Needs attention",
         title="Couldn’t finish that run.",
-        summary=message,
-        details_text=message,
-        error=message,
+        summary=summary,
+        details_text=details_text or summary,
+        error=summary,
     )
 
 
@@ -981,63 +1005,79 @@ def create_page_state(ui_request: UIRequest) -> PageState:
 
     argv = build_public_argv(ui_request)
     args = parse_public_args(argv)
-    output_buffer = io.StringIO()
-    error_buffer = io.StringIO()
 
     try:
-        with contextlib.redirect_stdout(output_buffer), contextlib.redirect_stderr(error_buffer):
-            if ui_request.job == "simulate":
-                result = run_public_simulate(args)
-                details_text = _combined_output(output_buffer, error_buffer)
-                return _build_simulation_state(ui_request, result, details_text)
+        if ui_request.job == "simulate":
+            result = execute_public_simulate(args)
+            details_text = format_public_simulation_output(
+                result,
+                details=True,
+                output=args.output,
+            )
+            return _build_simulation_state(ui_request, result, details_text)
 
-            result = run_public_backtest(args)
-            details_text = _combined_output(output_buffer, error_buffer)
-            return _build_backtest_state(ui_request, result, details_text)
+        result = execute_public_backtest(args)
+        details_text = format_public_backtest_output(
+            result,
+            details=True,
+            output=args.output,
+        )
+        return _build_backtest_state(ui_request, result, details_text)
     except Exception as exc:
-        return _error_state(ui_request, str(exc))
+        raw_message = str(exc)
+        return _error_state(
+            ui_request,
+            _friendly_runtime_message(ui_request, raw_message),
+            details_text=raw_message,
+        )
 
 
 def build_default_state() -> PageState:
     return create_page_state(_normalise_request())
 
 
-@app.get("/app.css")
-def app_css() -> Response:
-    return Response(APP_CSS, mimetype="text/css")
+app = Flask(__name__) if Flask is not None else None
 
 
-@app.get("/healthz")
-def healthz() -> tuple[str, int]:
-    return "ok", 200
+if app is not None:
 
+    @app.get("/app.css")
+    def app_css() -> Response:
+        return Response(APP_CSS, mimetype="text/css")
 
-@app.get("/favicon.ico")
-def favicon() -> Response:
-    return Response(status=204)
+    @app.get("/healthz")
+    def healthz() -> tuple[str, int]:
+        return "ok", 200
 
+    @app.get("/favicon.ico")
+    def favicon() -> Response:
+        return Response(status=204)
 
-@app.route("/", methods=["GET", "POST"])
-def index() -> str:
-    if flask_request.method == "POST":
-        ui_request = request_from_form(flask_request.form)
-    else:
-        ui_request = _normalise_request()
-    state = create_page_state(ui_request)
-    return render_template_string(
-        PAGE_TEMPLATE,
-        job_options=(("simulate", "Simulate"), ("backtest", "Backtest")),
-        source_options=(
-            ("demo", "Demo sample"),
-            ("auto", "Live first"),
-            ("local", "Local CSV"),
-        ),
-        source_notes=SOURCE_NOTES,
-        state=state,
-    )
+    @app.route("/", methods=["GET", "POST"])
+    def index() -> str:
+        if flask_request.method == "POST":
+            ui_request = request_from_form(flask_request.form)
+        else:
+            ui_request = _normalise_request()
+        state = create_page_state(ui_request)
+        return render_template_string(
+            PAGE_TEMPLATE,
+            job_options=(("simulate", "Simulate"), ("backtest", "Backtest")),
+            source_options=(
+                ("demo", "Demo sample"),
+                ("auto", "Live first"),
+                ("local", "Local CSV"),
+            ),
+            source_notes=SOURCE_NOTES,
+            state=state,
+        )
 
 
 def main() -> int:
+    if app is None:
+        print(FLASK_INSTALL_HINT, file=sys.stderr)
+        return 2
+
     app.run(
         host=os.environ.get("HOST", "127.0.0.1"),
         port=int(os.environ.get("PORT", "8000")),

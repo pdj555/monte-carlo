@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import app as web_app
+import pandas as pd
+import pytest
+
+pytest.importorskip("flask")
+
+import data  # noqa: E402
+import app as web_app  # noqa: E402
 
 
 def test_build_public_argv_for_demo_simulate_uses_sample_data_and_seed() -> None:
@@ -16,7 +22,6 @@ def test_build_public_argv_for_demo_simulate_uses_sample_data_and_seed() -> None
     assert web_app.DEMO_SEED in argv
     assert "--days" in argv
     assert "20" in argv
-    assert "--details" in argv
 
 
 def test_build_public_argv_for_demo_backtest_uses_short_window() -> None:
@@ -45,6 +50,28 @@ def test_create_page_state_for_default_demo_returns_chart() -> None:
     assert state.title
 
 
+def test_create_page_state_live_first_handles_download_shape(monkeypatch) -> None:
+    dates = pd.date_range("2024-01-01", periods=40, freq="D")
+    columns = pd.MultiIndex.from_product([["Close"], ["AAPL"]])
+    downloaded = pd.DataFrame(
+        [[100.0 + idx] for idx in range(len(dates))],
+        index=dates,
+        columns=columns,
+    )
+
+    def _download(_ticker, start=None, end=None, progress=False):
+        assert progress is False
+        return downloaded
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    state = web_app.create_page_state(web_app.UIRequest(source="auto"))
+
+    assert state.error is None
+    assert state.chart_data_url is not None
+    assert "Live prices weren’t available" not in state.summary
+
+
 def test_flask_app_renders_default_demo() -> None:
     client = web_app.app.test_client()
 
@@ -67,6 +94,7 @@ def test_flask_app_surfaces_local_path_guidance() -> None:
 
     assert response.status_code == 200
     assert "Choose a CSV file or folder before running Local CSV." in body
+    assert "CSV file or folder" in body
 
 
 def test_healthz_and_css_routes() -> None:

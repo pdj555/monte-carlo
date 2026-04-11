@@ -22,6 +22,7 @@
 python3 -m pip install -e .
 
 # Browser UI
+python3 -m pip install -e .[ui]
 monte-carlo-ui
 
 # Run simulations

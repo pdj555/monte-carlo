@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import logging
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -76,13 +78,16 @@ def build_public_parser() -> argparse.ArgumentParser:
         "--source",
         choices=("auto", "offline", "online"),
         default="auto",
-        help="Where to load price data from.",
+        help=(
+            "Price source. auto tries live first, offline uses local CSVs only, "
+            "online uses live data only."
+        ),
     )
     simulate_parser.add_argument(
         "--data-path",
         type=str,
         default=None,
-        help="Directory or CSV file for local price data.",
+        help="Directory or CSV file for offline runs or auto-mode local fallback.",
     )
     simulate_parser.add_argument(
         "--output",
@@ -157,13 +162,16 @@ def build_public_parser() -> argparse.ArgumentParser:
         "--source",
         choices=("auto", "offline", "online"),
         default="auto",
-        help="Where to load price data from.",
+        help=(
+            "Price source. auto tries live first, offline uses local CSVs only, "
+            "online uses live data only."
+        ),
     )
     backtest_parser.add_argument(
         "--data-path",
         type=str,
         default=None,
-        help="Directory or CSV file for local price data.",
+        help="Directory or CSV file for offline runs or auto-mode local fallback.",
     )
     backtest_parser.add_argument(
         "--output",
@@ -293,31 +301,32 @@ def _build_public_backtest_legacy_args(args: argparse.Namespace) -> argparse.Nam
     )
 
 
-def _render_public_simulation_output(
+def format_public_simulation_output(
     result: dict[str, Any],
     *,
     details: bool,
     output: str | None,
-) -> None:
+) -> str:
     report = result["report"]
     action_plan = report["action_plan"]
-
-    print(f"Stance: {action_plan['stance']}")
-    print(action_plan["headline"])
+    lines = [
+        f"Stance: {action_plan['stance']}",
+        action_plan["headline"],
+    ]
 
     if action_plan["primary_pick"] is not None:
         pick = action_plan["primary_pick"]
-        print(
+        lines.append(
             f"Top idea: {pick['ticker']} at {pick['weight']:.1%} weight "
             f"(expected return {pick['expected_return']:.1%})."
         )
     if action_plan["avoid_list"]:
-        print(f"Avoid: {', '.join(action_plan['avoid_list'])}")
+        lines.append(f"Avoid: {', '.join(action_plan['avoid_list'])}")
     if action_plan.get("cash_weight", 0.0) > 0:
-        print(f"Cash buffer: {action_plan['cash_weight']:.1%}")
+        lines.append(f"Cash buffer: {action_plan['cash_weight']:.1%}")
 
     for item in report["errors"]:
-        print(f"Skipped {item['ticker']}: {item['error']}")
+        lines.append(f"Skipped {item['ticker']}: {item['error']}")
 
     if details:
         summary_df = result["summaries"]
@@ -334,15 +343,65 @@ def _render_public_simulation_output(
             if allocations_payload
             else pd.DataFrame()
         )
-        render_detailed_simulation_tables(
-            summary_df,
-            portfolio_summary,
-            rankings,
-            allocations,
+        detail_buffer = io.StringIO()
+        with contextlib.redirect_stdout(detail_buffer):
+            render_detailed_simulation_tables(
+                summary_df,
+                portfolio_summary,
+                rankings,
+                allocations,
+            )
+        detail_text = detail_buffer.getvalue().strip()
+        if detail_text:
+            lines.extend(["", detail_text])
+
+    if output:
+        lines.append(f"Saved outputs to {Path(output).expanduser()}")
+
+    return "\n".join(lines).strip()
+
+
+def _render_public_simulation_output(
+    result: dict[str, Any],
+    *,
+    details: bool,
+    output: str | None,
+) -> None:
+    print(format_public_simulation_output(result, details=details, output=output))
+
+
+def format_public_backtest_output(
+    result: dict[str, pd.DataFrame | pd.Series],
+    *,
+    details: bool,
+    output: str | None,
+) -> str:
+    summary = result["summary"]
+    if not isinstance(summary, pd.Series):
+        raise ValueError("summary output must be a pandas Series")
+
+    lines = [
+        "Strategy return: "
+        f"{float(summary['strategy_total_return']):.1%} "
+        f"({float(summary['strategy_annualized_return']):.1%} annualized)",
+        f"Max drawdown: {float(summary['strategy_max_drawdown']):.1%}",
+        f"vs equal weight: {float(summary['excess_return_vs_equal_weight']):.1%}",
+        f"vs cash: {float(summary['excess_return_vs_cash']):.1%}",
+    ]
+
+    if details:
+        lines.append("")
+        lines.append("Backtest summary")
+        lines.append(
+            summary.to_frame(name="value").to_string(
+                float_format=lambda value: f"{value:0.4f}"
+            )
         )
 
     if output:
-        print(f"Saved outputs to {Path(output).expanduser()}")
+        lines.append(f"Saved outputs to {Path(output).expanduser()}")
+
+    return "\n".join(lines).strip()
 
 
 def _render_public_backtest_output(
@@ -351,32 +410,28 @@ def _render_public_backtest_output(
     details: bool,
     output: str | None,
 ) -> None:
-    summary = result["summary"]
-    if not isinstance(summary, pd.Series):
-        raise ValueError("summary output must be a pandas Series")
+    print(format_public_backtest_output(result, details=details, output=output))
 
-    print(
-        "Strategy return: "
-        f"{float(summary['strategy_total_return']):.1%} "
-        f"({float(summary['strategy_annualized_return']):.1%} annualized)"
-    )
-    print(f"Max drawdown: {float(summary['strategy_max_drawdown']):.1%}")
-    print(f"vs equal weight: {float(summary['excess_return_vs_equal_weight']):.1%}")
-    print(f"vs cash: {float(summary['excess_return_vs_cash']):.1%}")
 
-    if details:
-        print("\nBacktest summary")
-        print(summary.to_frame(name="value").to_string(float_format=lambda value: f"{value:0.4f}"))
+def execute_public_simulate(args: argparse.Namespace) -> dict[str, Any]:
+    """Execute the simulate command without rendering text output."""
 
-    if output:
-        print(f"Saved outputs to {Path(output).expanduser()}")
+    legacy_args = _build_public_simulate_legacy_args(args)
+    return run_simulation(legacy_args, render=False, display_plots=False)
+
+
+def execute_public_backtest(args: argparse.Namespace) -> dict[str, pd.DataFrame | pd.Series]:
+    """Execute the backtest command without rendering text output."""
+
+    legacy_args = _build_public_backtest_legacy_args(args)
+    return backtest_cli.run(legacy_args, render=False)
 
 
 def run_public_simulate(args: argparse.Namespace) -> dict[str, Any]:
     """Execute the simplified simulate command."""
 
     legacy_args = _build_public_simulate_legacy_args(args)
-    result = run_simulation(legacy_args, render=False, display_plots=False)
+    result = execute_public_simulate(args)
     _render_public_simulation_output(
         result,
         details=bool(args.details),
@@ -389,8 +444,7 @@ def run_public_simulate(args: argparse.Namespace) -> dict[str, Any]:
 def run_public_backtest(args: argparse.Namespace) -> dict[str, pd.DataFrame | pd.Series]:
     """Execute the simplified backtest command."""
 
-    legacy_args = _build_public_backtest_legacy_args(args)
-    result = backtest_cli.run(legacy_args, render=False)
+    result = execute_public_backtest(args)
     _render_public_backtest_output(
         result,
         details=bool(args.details),
