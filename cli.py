@@ -3,26 +3,23 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
 import sys
-from importlib import metadata
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-import matplotlib.pyplot as plt
 import pandas as pd
 
-from simulation import (
-    estimate_gbm_parameters,
-    simulate_gbm,
-    simulate_prediction_market,
-    simulate_prices,
+from cli_shared import (
+    non_negative_int,
+    package_version,
+    positive_float,
+    positive_int,
+    ranking_display_columns,
 )
 
 LOGGER = logging.getLogger(__name__)
-_FALLBACK_VERSION = "0.1.0"
 
 
 def _parser_error_if(
@@ -57,151 +54,6 @@ def _print_portfolio_summary(summary: pd.Series, *, minimal: bool) -> None:
     print(summary.to_frame(name="value").to_string(float_format=lambda v: f"{v:0.2f}"))
 
 
-def _simulate_model(
-    *,
-    args: argparse.Namespace,
-    returns: pd.Series,
-    current_price: float,
-    ticker_seed: int | None,
-) -> pd.DataFrame:
-    if args.model == "historical":
-        return simulate_prices(
-            returns,
-            days=args.days,
-            scenarios=args.scenarios,
-            dt=args.dt,
-            seed=ticker_seed,
-            current_price=current_price,
-            shock_probability=float(args.shock_probability),
-            shock_return=float(args.shock_return),
-            block_size=int(args.block_size),
-        )
-    if args.model == "gbm":
-        mu, sigma = estimate_gbm_parameters(returns)
-        return simulate_gbm(
-            current_price=current_price,
-            mu=mu,
-            sigma=sigma,
-            days=args.days,
-            scenarios=args.scenarios,
-            dt=args.dt,
-            seed=ticker_seed,
-            shock_probability=float(args.shock_probability),
-            shock_return=float(args.shock_return),
-        )
-    return simulate_prediction_market(
-        fundamental_probability=float(args.fundamental_probability),
-        current_price=float(current_price),
-        days=args.days,
-        scenarios=args.scenarios,
-        certainty=float(args.fundamental_certainty),
-        mean_reversion=float(args.prob_mean_reversion),
-        daily_volatility=float(args.prob_daily_volatility),
-        dt=args.dt,
-        seed=ticker_seed,
-    )
-
-
-def _save_outputs(
-    *,
-    output_dir: Path,
-    summary_df: pd.DataFrame,
-    report: dict[str, object],
-    rankings: pd.DataFrame,
-    allocations: pd.DataFrame,
-    execution_plan: pd.DataFrame,
-    action_plan: dict[str, object],
-    combined: pd.DataFrame,
-    save_simulations: bool,
-) -> None:
-    summary_df.to_csv(output_dir / "summaries.csv", float_format="%.6g")
-    with (output_dir / "summaries.json").open("w", encoding="utf-8") as handle:
-        json.dump(summary_df.to_dict(orient="index"), handle, indent=2)
-
-    with (output_dir / "report.json").open("w", encoding="utf-8") as handle:
-        json.dump(report, handle, indent=2)
-
-    if not rankings.empty:
-        rankings.to_csv(output_dir / "rankings.csv", float_format="%.6g")
-    if not allocations.empty:
-        allocations.to_csv(output_dir / "allocations.csv", float_format="%.6g")
-    if not execution_plan.empty:
-        execution_plan.to_csv(output_dir / "execution_plan.csv", float_format="%.6g")
-
-    with (output_dir / "action_plan.md").open("w", encoding="utf-8") as handle:
-        handle.write("# Action Plan\n\n")
-        handle.write(f"- **Stance:** {action_plan['stance']}\n")
-        handle.write(f"- **Headline:** {action_plan['headline']}\n")
-        if action_plan["primary_pick"] is not None:
-            pick = action_plan["primary_pick"]
-            handle.write(
-                "- **Primary pick:** "
-                f"{pick['ticker']} (weight {pick['weight']:.1%}, score {pick['score']:.1f}, "
-                f"expected return {pick['expected_return']:.1%})\n"
-            )
-        if action_plan["avoid_list"]:
-            handle.write(f"- **Avoid:** {', '.join(action_plan['avoid_list'])}\n")
-        if action_plan.get("cash_weight", 0.0) > 0:
-            handle.write(f"- **Cash buffer:** {action_plan['cash_weight']:.1%}\n")
-
-        if not execution_plan.empty:
-            handle.write("\n## Execution Plan\n\n")
-            handle.write(
-                "| Ticker | Weight | Price | Target $ | Shares | Est. Cost | Cash Drift |\n"
-            )
-            handle.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n")
-            for ticker, row in execution_plan.iterrows():
-                handle.write(
-                    (
-                        f"| {ticker} | {row['weight']:.1%} | {row['price']:.2f} | "
-                        f"{row['target_dollars']:.2f} | {row['shares']:.4f} | "
-                        f"{row['est_cost']:.2f} | {row['cash_drift']:.2f} |\n"
-                    )
-                )
-
-    if save_simulations and not combined.empty:
-        combined.to_csv(output_dir / "simulations.csv.gz", compression="gzip")
-
-
-def _package_version() -> str:
-    try:
-        return metadata.version("monte-carlo-sim")
-    except metadata.PackageNotFoundError:
-        return _FALLBACK_VERSION
-    except Exception:
-        return _FALLBACK_VERSION
-
-
-def _positive_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be an integer") from exc
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be a positive integer")
-    return parsed
-
-
-def _non_negative_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be an integer") from exc
-    if parsed < 0:
-        raise argparse.ArgumentTypeError("must be a non-negative integer")
-    return parsed
-
-
-def _positive_float(value: str) -> float:
-    try:
-        parsed = float(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a number") from exc
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be a positive number")
-    return parsed
-
-
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI argument parser."""
 
@@ -212,7 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {_package_version()}",
+        version=f"%(prog)s {package_version()}",
     )
     parser.add_argument(
         "--journal-file",
@@ -239,19 +91,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--days",
-        type=_positive_int,
+        type=positive_int,
         default=252,
         help="Number of future trading days to simulate.",
     )
     parser.add_argument(
         "--scenarios",
-        type=_positive_int,
+        type=positive_int,
         default=1000,
         help="Number of Monte Carlo scenarios to run per ticker.",
     )
     parser.add_argument(
         "--max-paths",
-        type=_non_negative_int,
+        type=non_negative_int,
         default=100,
         help="Maximum number of simulated paths to plot per ticker (0 = all).",
     )
@@ -262,13 +114,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dt",
-        type=_positive_float,
+        type=positive_float,
         default=1.0,
         help="Time increment for each simulation step (in trading days).",
     )
     parser.add_argument(
         "--block-size",
-        type=_positive_int,
+        type=positive_int,
         default=1,
         help=(
             "Bootstrap block size for historical model (1 = IID resampling). "
@@ -292,7 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--seed",
-        type=_non_negative_int,
+        type=non_negative_int,
         default=None,
         help="Random seed for reproducible results.",
     )
@@ -325,7 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--fundamental-certainty",
-        type=_positive_float,
+        type=positive_float,
         default=100.0,
         help=(
             "Pseudo-count confidence in --fundamental-probability for "
@@ -481,7 +333,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--capital",
-        type=_positive_float,
+        type=positive_float,
         default=None,
         help="Optional portfolio capital used to produce executable dollar/share sizing.",
     )
@@ -654,139 +506,6 @@ def _apply_policy_file(
     return args
 
 
-def _normalise_tickers(ticker_arg: str) -> list[str]:
-    requested = [ticker.strip().upper() for ticker in ticker_arg.split(",") if ticker.strip()]
-    if not requested:
-        raise ValueError("No valid tickers were supplied. Provide at least one ticker symbol.")
-
-    tickers: list[str] = []
-    seen: set[str] = set()
-    for ticker in requested:
-        if ticker in seen:
-            continue
-        seen.add(ticker)
-        tickers.append(ticker)
-    return tickers
-
-
-def _hash_payload(payload: dict[str, object]) -> str:
-    """Return a deterministic SHA-256 hash for a JSON-compatible payload."""
-
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _last_journal_chain_hash(journal_path: Path) -> str | None:
-    """Return the last chain hash from a JSONL journal, if available."""
-
-    if not journal_path.exists():
-        return None
-
-    try:
-        lines = journal_path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
-
-    for line in reversed(lines):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            return None
-        value = entry.get("chain_hash")
-        return str(value) if isinstance(value, str) and value else None
-    return None
-
-
-def _append_journal_entry(
-    *,
-    journal_path: Path,
-    report: dict[str, object],
-    args: argparse.Namespace,
-) -> dict[str, object]:
-    """Append a tamper-evident run entry to the decision journal."""
-
-    previous_chain_hash = _last_journal_chain_hash(journal_path)
-    report_hash = _hash_payload(report)
-    summary = {
-        ticker: payload.get("summary", {})
-        for ticker, payload in report.get("results", {}).items()
-        if isinstance(payload, dict)
-    }
-
-    body = {
-        "generated_at": report.get("generated_at"),
-        "tickers": sorted(summary.keys()),
-        "model": args.model,
-        "days": int(args.days),
-        "scenarios": int(args.scenarios),
-        "portfolio_risk_budget_pct": float(args.portfolio_risk_budget_pct),
-        "policy_crc32": report.get("policy_crc32"),
-        "report_hash": report_hash,
-        "previous_chain_hash": previous_chain_hash,
-        "summaries": summary,
-    }
-
-    chain_hash_input = {
-        "report_hash": report_hash,
-        "previous_chain_hash": previous_chain_hash,
-    }
-    entry = {
-        "schema_version": 1,
-        **body,
-        "chain_hash": _hash_payload(chain_hash_input),
-    }
-    journal_path.parent.mkdir(parents=True, exist_ok=True)
-    with journal_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, sort_keys=True))
-        handle.write("\n")
-    return entry
-
-
-def _ranking_display_columns(rankings: pd.DataFrame) -> list[str]:
-    preferred = [
-        "score",
-        "expected_return",
-        "prob_above_current",
-        "value_at_risk_95_pct",
-        "max_drawdown_q95",
-        "recommendation",
-        "guardrail_reasons",
-    ]
-    return [column for column in preferred if column in rankings.columns]
-
-
-def _render_detailed_simulation_tables(
-    summary_df: pd.DataFrame,
-    portfolio_summary: pd.Series | None,
-    rankings: pd.DataFrame,
-    allocations: pd.DataFrame,
-) -> None:
-    for ticker, row in summary_df.iterrows():
-        _print_ticker_summary(ticker=str(ticker), summary=row, minimal=False)
-
-    if portfolio_summary is not None:
-        _print_portfolio_summary(portfolio_summary, minimal=False)
-
-    if not rankings.empty:
-        print("\nTicker ranking")
-        print(
-            rankings.loc[:, _ranking_display_columns(rankings)].to_string(
-                float_format=lambda value: f"{value:0.3f}"
-            )
-        )
-
-    if not allocations.empty:
-        print("\nSuggested allocation")
-        print(
-            allocations.loc[:, ["weight", "score", "value_at_risk_95_pct"]].to_string(
-                float_format=lambda value: f"{value:0.3f}"
-            )
-        )
-
-
 def _render_legacy_simulation_output(result: dict[str, Any], args: argparse.Namespace) -> None:
     summary_df = result["summaries"]
     portfolio_summary = result["portfolio_summary"]
@@ -821,7 +540,7 @@ def _render_legacy_simulation_output(result: dict[str, Any], args: argparse.Name
     if not rankings.empty and not args.minimal:
         print("\nTicker ranking")
         print(
-            rankings.loc[:, _ranking_display_columns(rankings)].to_string(
+            rankings.loc[:, ranking_display_columns(rankings)].to_string(
                 float_format=lambda value: f"{value:0.3f}"
             )
         )
@@ -852,12 +571,6 @@ def _render_legacy_simulation_output(result: dict[str, Any], args: argparse.Name
         print(f"- Avoid: {', '.join(action_plan['avoid_list'])}")
     if action_plan.get("cash_weight", 0.0) > 0:
         print(f"- Cash buffer: {action_plan['cash_weight']:.1%}")
-
-
-def _maybe_show_simulation_plots(args: argparse.Namespace, result: dict[str, Any]) -> None:
-    if bool(args.show) and not bool(args.no_plots) and not result["simulations"].empty:
-        plt.show()
-        plt.close("all")
 
 
 def run(

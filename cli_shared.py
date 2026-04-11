@@ -10,6 +10,15 @@ import pandas as pd
 FALLBACK_VERSION = "0.1.0"
 
 
+class IntentionalDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
+    """Show only defaults that help a human choose the happy path."""
+
+    def _get_help_string(self, action: argparse.Action) -> str:
+        if action.default in (None, False, argparse.SUPPRESS):
+            return action.help
+        return super()._get_help_string(action)
+
+
 def package_version() -> str:
     try:
         return metadata.version("monte-carlo-sim")

@@ -11,6 +11,7 @@ import pandas as pd
 
 import backtest as backtest_cli
 from cli_shared import (
+    IntentionalDefaultsHelpFormatter,
     non_negative_int,
     package_version,
     positive_int,
@@ -27,7 +28,7 @@ def build_public_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="monte-carlo",
         description="Monte Carlo tools for current ideas and historical validation.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=IntentionalDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--version",
@@ -40,7 +41,7 @@ def build_public_parser() -> argparse.ArgumentParser:
     simulate_parser = subparsers.add_parser(
         "simulate",
         help="Rank current opportunities from simulated future paths.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=IntentionalDefaultsHelpFormatter,
     )
     simulate_parser.add_argument(
         "tickers",
@@ -103,7 +104,7 @@ def build_public_parser() -> argparse.ArgumentParser:
     backtest_parser = subparsers.add_parser(
         "backtest",
         help="Validate the process with walk-forward backtesting.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=IntentionalDefaultsHelpFormatter,
     )
     backtest_parser.add_argument(
         "tickers",
@@ -179,12 +180,20 @@ def build_public_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _parse_public_args_with_parser(
+    argv: Optional[Iterable[str]] = None,
+) -> tuple[argparse.ArgumentParser, argparse.Namespace]:
+    parser = build_public_parser()
+    args = parser.parse_args(list(argv) if argv is not None else None)
+    if getattr(args, "command", None) and not args.tickers:
+        args.tickers = ["AAPL"]
+    return parser, args
+
+
 def parse_public_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     """Return parsed arguments for the public CLI."""
 
-    args = build_public_parser().parse_args(list(argv) if argv is not None else None)
-    if getattr(args, "command", None) and not args.tickers:
-        args.tickers = ["AAPL"]
+    _, args = _parse_public_args_with_parser(argv)
     return args
 
 
@@ -393,14 +402,11 @@ def run_public_backtest(args: argparse.Namespace) -> dict[str, pd.DataFrame | pd
 def main(argv: Optional[Iterable[str]] = None) -> int:
     """Entrypoint for the public ``monte-carlo`` command."""
 
-    parser = build_public_parser()
-    args = parser.parse_args(list(argv) if argv is not None else None)
+    parser, args = _parse_public_args_with_parser(argv)
     if args.command is None:
         parser.print_help()
         print("\nChoose `simulate` for current ideas or `backtest` for historical validation.")
         return 1
-    if not args.tickers:
-        args.tickers = ["AAPL"]
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     try:

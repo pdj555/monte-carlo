@@ -11,12 +11,10 @@ matplotlib.use("Agg")
 import backtest as backtest_module  # noqa: E402
 import cli as cli_module  # noqa: E402
 import MonteCarlo  # noqa: E402
-from cli import (  # noqa: E402
-    legacy_main,
+from cli import legacy_main, parse_args, run  # noqa: E402
+from public_cli import (  # noqa: E402
     main,
-    parse_args,
     parse_public_args,
-    run,
     run_public_backtest,
     run_public_simulate,
 )
@@ -48,6 +46,17 @@ def test_public_main_without_subcommand_prints_help_hint(capsys):
 def test_public_parse_args_rejects_unknown_source():
     with pytest.raises(SystemExit):
         parse_public_args(["simulate", "AAPL", "--source", "sideways"])
+
+
+@pytest.mark.parametrize("argv", [["simulate", "--help"], ["backtest", "--help"]])
+def test_public_help_hides_none_and_false_defaults(argv, capsys):
+    with pytest.raises(SystemExit) as exc:
+        parse_public_args(argv)
+
+    captured = capsys.readouterr()
+    assert exc.value.code == 0
+    assert "(default: None)" not in captured.out
+    assert "(default: False)" not in captured.out
 
 
 def test_public_simulate_matches_legacy_core_outputs(tmp_path, capsys):

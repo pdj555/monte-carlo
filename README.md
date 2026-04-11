@@ -77,10 +77,18 @@ monte-carlo backtest AAPL MSFT \
 
 ### Offline example
 
+The bundled `sample_data` history is intentionally short, so use a short
+walk-forward window for the offline example.
+
 ```bash
 monte-carlo backtest AAPL \
   --source offline \
-  --data-path sample_data
+  --data-path sample_data \
+  --lookback 5 \
+  --hold 3 \
+  --rebalance 3 \
+  --top 1 \
+  --scenarios 10
 ```
 
 ### What it prints
