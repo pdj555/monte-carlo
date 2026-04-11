@@ -2,6 +2,7 @@
 
 ## Project Structure & Module Organization
 
+- `app.py`: lean Flask UI for the browser surface and local `monte-carlo-ui` entrypoint.
 - `public_cli.py`: public CLI implementation for `monte-carlo simulate|backtest`.
 - `simulate_cli.py`: shared simulation workflow used by public and legacy entrypoints.
 - `cli_shared.py`: shared parser and rendering helpers for CLI surfaces.
@@ -19,6 +20,9 @@
 
 ```bash
 python3 -m pip install -e .
+
+# Browser UI
+monte-carlo-ui
 
 # Run simulations
 monte-carlo simulate AAPL MSFT --days 252 --scenarios 5000 --model gbm --seed 42 --output results

@@ -24,6 +24,15 @@ After install, use the packaged command:
 monte-carlo --help
 ```
 
+For the browser UI:
+
+```bash
+monte-carlo-ui
+```
+
+Then open [http://127.0.0.1:8000](http://127.0.0.1:8000). The app starts with
+the bundled AAPL demo so you land on a real decision instead of an empty page.
+
 For headless environments:
 
 ```bash
@@ -117,12 +126,25 @@ sample_data/<TICKER>.csv
 
 Use `--data-path` to point at a custom directory or a single CSV file.
 
+## Browser UI
+
+The web UI keeps the happy path tiny:
+
+- choose `Simulate` or `Backtest`
+- enter one or more tickers
+- pick `Demo sample`, `Live first`, or `Local CSV`
+
+`Demo sample` opens instantly and stays deterministic. `Live first` starts
+online and falls back to local CSVs. `Local CSV` accepts a single file or a
+directory of `<TICKER>.csv` files with `Date` and `Close` columns.
+
 ## Migration Note
 
 Legacy script entrypoints remain available as deprecated compatibility wrappers.
 
 ## Architecture
 
+- `app.py` - lean Flask UI for the browser surface and local `monte-carlo-ui` entrypoint
 - `public_cli.py` - public `monte-carlo simulate|backtest` parser and runners
 - `simulate_cli.py` - shared simulation workflow used by public and legacy entrypoints
 - `cli_shared.py` - shared parser and rendering helpers for CLI surfaces

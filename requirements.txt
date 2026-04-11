@@ -1,4 +1,5 @@
 # Primary dependencies (runtime)
+Flask>=3.0
 yfinance>=0.2
 seaborn>=0.13
 numpy>=1.26

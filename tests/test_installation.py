@@ -110,3 +110,4 @@ def test_installed_entrypoint_runs_offline_simulate_and_backtest() -> None:
 def test_pyproject_console_script_points_to_public_cli() -> None:
     text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'monte-carlo = "public_cli:main"' in text
+    assert 'monte-carlo-ui = "app:main"' in text
