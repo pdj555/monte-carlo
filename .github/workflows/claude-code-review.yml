@@ -9,6 +9,7 @@ on:
       - "requirements*.txt"
       - "requirements.lock.txt"
       - ".github/workflows/**"
+      - ".claude/commands/**"
 
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}
@@ -26,33 +27,18 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Claude revenue-focused review
-        uses: anthropics/claude-code-action@beta
+      - name: Claude profit-focused review
+        id: review
+        uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          timeout_minutes: "15"
-          allowed_tools: "Bash(git diff:*),Bash(git log:*),Bash(pytest -q),Bash(flake8 .)"
-          direct_prompt: |
-            You are a senior quant engineer reviewing this PR with ONE job: protect and grow revenue.
-
-            This is a Monte Carlo trading toolkit. Every line of code in this repo either makes money, loses money, or is dead weight. Treat dead weight as loss.
-
-            Review the diff and answer — bluntly, in this exact order:
-
-            1. **PROFIT IMPACT** — Does this change raise expected return, cut drawdown, speed up simulation, or widen the monetizable surface (CLI / API / UI)? Quantify where possible. If there is no profit path, say so and recommend rejection.
-            2. **CORRECTNESS** — Any math error, off-by-one, look-ahead bias, data leakage between train/test windows, or silent NaN handling that would produce a fake P&L? Flag it hard. Bad numbers burn capital.
-            3. **PERFORMANCE** — Python loops where numpy vectorization belongs? Unnecessary DataFrame copies? Blocking I/O on the hot path? Call it out with a concrete fix.
-            4. **RISK & SAFETY** — Value-at-Risk, position sizing, tail behavior. Does `summarize_final_prices()` still tell the truth? Does `backtest.py` still produce walk-forward-honest results?
-            5. **SHIPPABILITY** — Is this PR mergeable today, or does it need rework? No hedging. Give a verdict: SHIP IT, REWORK, or REJECT.
-
-            Constraints:
-            - Follow conventions in `CLAUDE.md`, `simulation.py`, `analysis.py`, `backtest.py`, `public_cli.py`.
-            - Do not ask for tests, docstrings, or refactors that do not move the revenue needle.
-            - Be concise. Be direct. Traders do not read prose — they read verdicts.
-
-            End your review with a single line:
-            `PROFIT VERDICT: <SHIP IT | REWORK | REJECT> — <one sentence reason>`
+          track_progress: true
+          prompt: "/profit-review REPO: ${{ github.repository }} PR: ${{ github.event.pull_request.number }} SHA: ${{ github.event.pull_request.head.sha }}"
+          claude_args: |
+            --model claude-opus-4-6
+            --max-turns 8
+            --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(pytest -q),Bash(flake8 .),mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
