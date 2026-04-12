@@ -411,7 +411,7 @@ def _render_public_simulation_output(
 
 
 def format_public_backtest_output(
-    result: dict[str, pd.DataFrame | pd.Series],
+    result: dict[str, object],
     *,
     details: bool,
     output: str | None,
@@ -451,7 +451,7 @@ def format_public_backtest_output(
 
 
 def _render_public_backtest_output(
-    result: dict[str, pd.DataFrame | pd.Series],
+    result: dict[str, object],
     *,
     details: bool,
     output: str | None,
@@ -466,7 +466,7 @@ def execute_public_simulate(args: argparse.Namespace) -> dict[str, Any]:
     return run_simulation(legacy_args, render=False, display_plots=False)
 
 
-def execute_public_backtest(args: argparse.Namespace) -> dict[str, pd.DataFrame | pd.Series]:
+def execute_public_backtest(args: argparse.Namespace) -> dict[str, object]:
     """Execute the backtest command without rendering text output."""
 
     legacy_args = _build_public_backtest_legacy_args(args)
@@ -487,7 +487,7 @@ def run_public_simulate(args: argparse.Namespace) -> dict[str, Any]:
     return result
 
 
-def run_public_backtest(args: argparse.Namespace) -> dict[str, pd.DataFrame | pd.Series]:
+def run_public_backtest(args: argparse.Namespace) -> dict[str, object]:
     """Execute the simplified backtest command."""
 
     result = execute_public_backtest(args)

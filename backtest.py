@@ -233,7 +233,7 @@ def run_walk_forward_backtest(
     portfolio_risk_budget_pct: float = 0.02,
     transaction_cost_bps: float = 0.0,
     annual_cash_yield: float = 0.04,
-) -> dict[str, pd.DataFrame | pd.Series]:
+) -> dict[str, object]:
     """Run a deterministic walk-forward backtest over aligned price history."""
 
     if lookback_days <= 0 or holding_days <= 0 or rebalance_every <= 0 or top_k <= 0:
@@ -386,7 +386,7 @@ def run_walk_forward_backtest(
 def _save_outputs(
     *,
     output_dir: Path,
-    result: dict[str, pd.DataFrame | pd.Series],
+    result: dict[str, object],
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary = result["summary"]
@@ -403,6 +403,12 @@ def _save_outputs(
     summary.to_frame(name="value").to_csv(output_dir / "backtest_summary.csv", float_format="%.6g")
     rebalance_log.to_csv(output_dir / "rebalance_log.csv", float_format="%.6g")
     equity_curve.to_csv(output_dir / "equity_curve.csv", float_format="%.6g")
+    price_sources = result.get("price_sources", {})
+    if not isinstance(price_sources, dict):
+        raise ValueError("price_sources output must be a dictionary")
+    with (output_dir / "price_sources.json").open("w", encoding="utf-8") as handle:
+        json.dump(price_sources, handle, indent=2, sort_keys=True)
+        handle.write("\n")
 
     fig = plot_equity_curve(equity_curve)
     fig.savefig(output_dir / "equity_curve.png", bbox_inches="tight")
@@ -452,7 +458,7 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     return args
 
 
-def _render_backtest_output(result: dict[str, pd.DataFrame | pd.Series]) -> None:
+def _render_backtest_output(result: dict[str, object]) -> None:
     summary = result["summary"]
     if not isinstance(summary, pd.Series):
         raise ValueError("summary output must be a pandas Series")
@@ -463,7 +469,7 @@ def run(
     args: argparse.Namespace,
     *,
     render: bool = True,
-) -> dict[str, pd.DataFrame | pd.Series]:
+) -> dict[str, object]:
     """Execute the walk-forward backtest workflow."""
 
     tickers = _normalise_tickers(args.tickers)

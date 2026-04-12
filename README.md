@@ -69,11 +69,19 @@ monte-carlo simulate AAPL MSFT \
 ### What it prints
 
 - stance and headline
+- data source
 - top idea
 - avoid list when guardrails fail
 - cash buffer when conviction is low
 
 Add `--details` when you want tables and secondary metrics.
+
+### How to read the result
+
+- `Stance` is the posture: lean in, stay selective, or wait.
+- `Data source` tells you whether the run used live prices, local CSVs, or a fallback.
+- `Top idea` is the first name to inspect; the suggested weight is a sizing hint, not an order.
+- `Avoid` and `Cash buffer` are guardrails. Treat them as a signal to pass or keep more capital idle.
 
 ## Workflow 2: backtest
 
@@ -115,6 +123,15 @@ monte-carlo backtest AAPL \
 - excess return vs cash
 
 Add `--details` for the full metric table.
+
+### How to read the result
+
+- `Strategy return` is the outcome of the full rebalance process.
+- `Annualized return` lets you compare runs with different window lengths.
+- `Max drawdown` is the deepest peak-to-trough loss; smaller is easier to hold.
+- `vs equal weight` asks whether the process beat a simple own-everything baseline.
+- `vs cash` asks whether taking market risk paid for itself.
+- Saved backtest folders also include `price_sources.json` so the origin of the prices survives the run.
 
 ## Data Sources
 

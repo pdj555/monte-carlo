@@ -49,6 +49,13 @@ def test_readme_distinguishes_cli_commands_from_browser_entrypoint() -> None:
     assert "Optional browser entrypoint:" in text
 
 
+def test_readme_explains_how_to_read_results_and_saved_backtest_outputs() -> None:
+    text = README_PATH.read_text(encoding="utf-8")
+    assert text.count("### How to read the result") == 2
+    assert "`Data source` tells you whether the run used live prices" in text
+    assert "`price_sources.json`" in text
+
+
 def test_readme_offline_examples_run(capsys) -> None:
     sample_data = str(REPO_ROOT / "sample_data")
 

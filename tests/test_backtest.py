@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pandas as pd
 
 from backtest import main, parse_args, run, run_walk_forward_backtest
@@ -171,6 +173,22 @@ def test_backtest_cli_saves_summary_log_curve_and_plot(tmp_path):
     assert (output_dir / "rebalance_log.csv").exists()
     assert (output_dir / "equity_curve.csv").exists()
     assert (output_dir / "equity_curve.png").exists()
+    assert (output_dir / "price_sources.json").exists()
+
+    price_sources = json.loads((output_dir / "price_sources.json").read_text(encoding="utf-8"))
+    assert set(price_sources) == {"AAPL", "MSFT"}
+    assert price_sources["AAPL"] == {
+        "is_sample_data": False,
+        "kind": "local",
+        "path": str(data_dir / "AAPL.csv"),
+        "used_fallback": False,
+    }
+    assert price_sources["MSFT"] == {
+        "is_sample_data": False,
+        "kind": "local",
+        "path": str(data_dir / "MSFT.csv"),
+        "used_fallback": False,
+    }
 
 
 def test_backtest_wrapper_warns_and_supports_legacy_flags(tmp_path, capsys):
