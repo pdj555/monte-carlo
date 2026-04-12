@@ -61,7 +61,7 @@ monte-carlo simulate AAPL MSFT \
 ### Offline example
 
 ```bash
-monte-carlo simulate AAPL \
+monte-carlo simulate AAPL MSFT \
   --source offline \
   --data-path sample_data
 ```
@@ -129,6 +129,9 @@ Local CSVs should include `Date` and `Close` columns. By default the repo looks 
 ```text
 sample_data/<TICKER>.csv
 ```
+
+The bundled `sample_data` directory includes `AAPL.csv` and `MSFT.csv` so the
+offline path stays deterministic out of the box.
 
 Use `--data-path` to point at a custom directory or a single CSV file.
 

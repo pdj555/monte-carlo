@@ -92,8 +92,9 @@ def build_public_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help=(
-            "Directory of <TICKER>.csv files or single CSV file for offline runs "
-            "or auto-mode local fallback. CSVs need Date and Close columns."
+            "Path to a CSV file, or a directory of <TICKER>.csv files with Date "
+            "and Close columns. Used for offline runs and as the local fallback "
+            "for auto."
         ),
     )
     simulate_parser.add_argument(
@@ -179,8 +180,9 @@ def build_public_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help=(
-            "Directory of <TICKER>.csv files or single CSV file for offline runs "
-            "or auto-mode local fallback. CSVs need Date and Close columns."
+            "Path to a CSV file, or a directory of <TICKER>.csv files with Date "
+            "and Close columns. Used for offline runs and as the local fallback "
+            "for auto."
         ),
     )
     backtest_parser.add_argument(

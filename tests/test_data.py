@@ -95,6 +95,15 @@ def test_fetch_prices_offline_directory_is_case_insensitive(tmp_path):
     assert not prices.empty
 
 
+def test_fetch_prices_supports_bundled_secondary_sample_fixture() -> None:
+    prices = fetch_prices("MSFT", prefer_local=True)
+
+    assert not prices.empty
+    assert prices.index.is_monotonic_increasing
+    assert float(prices.iloc[0]) == 210.0
+    assert float(prices.iloc[-1]) == 198.0
+
+
 def test_fetch_prices_rejects_start_after_end(tmp_path):
     offline_dir = tmp_path / "offline"
     offline_dir.mkdir()

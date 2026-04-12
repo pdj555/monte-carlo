@@ -88,6 +88,7 @@ def test_installed_entrypoint_runs_offline_simulate_and_backtest() -> None:
         entrypoint,
         "simulate",
         "AAPL",
+        "MSFT",
         "--source",
         "offline",
         "--data-path",
@@ -101,11 +102,14 @@ def test_installed_entrypoint_runs_offline_simulate_and_backtest() -> None:
     assert simulate.returncode == 0, simulate.stderr
     assert "Stance:" in simulate.stdout
     assert "Ticker ranking" in simulate.stdout
+    assert "AAPL" in simulate.stdout
+    assert "MSFT" in simulate.stdout
 
     backtest = _run_entrypoint(
         entrypoint,
         "backtest",
         "AAPL",
+        "MSFT",
         "--source",
         "offline",
         "--data-path",

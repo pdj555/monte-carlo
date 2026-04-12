@@ -72,6 +72,21 @@ def test_create_page_state_live_first_handles_download_shape(monkeypatch) -> Non
     assert "Live prices weren’t available" not in state.summary
 
 
+def test_create_page_state_local_sample_data_handles_multiple_tickers() -> None:
+    state = web_app.create_page_state(
+        web_app.UIRequest(
+            source="local",
+            tickers="AAPL MSFT",
+            data_path=str(web_app.SAMPLE_DATA_DIR),
+        )
+    )
+
+    assert state.error is None
+    assert state.chart_data_url is not None
+    assert "Summary for AAPL" in state.details_text
+    assert "Summary for MSFT" in state.details_text
+
+
 def test_flask_app_renders_default_demo() -> None:
     client = web_app.app.test_client()
 

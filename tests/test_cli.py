@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -67,9 +69,43 @@ def test_public_help_explains_auto_source(argv, capsys):
 
     captured = capsys.readouterr()
     assert "auto tries live first" in captured.out
-    assert "local fallback" in captured.out
+    assert "local fallback for auto" in captured.out
     assert "<TICKER>.csv" in captured.out
     assert "Date and Close columns" in captured.out
+
+
+def test_public_simulate_with_bundled_sample_data_ranks_distinct_profiles(capsys):
+    sample_data = str(Path(__file__).resolve().parents[1] / "sample_data")
+
+    result = run_public_simulate(
+        parse_public_args(
+            [
+                "simulate",
+                "AAPL",
+                "MSFT",
+                "--source",
+                "offline",
+                "--data-path",
+                sample_data,
+                "--days",
+                "5",
+                "--scenarios",
+                "25",
+                "--seed",
+                "42",
+                "--details",
+            ]
+        )
+    )
+
+    output = capsys.readouterr().out
+    rankings = list(result["report"]["rankings"])
+
+    assert rankings[0] == "AAPL"
+    assert rankings[-1] == "MSFT"
+    assert "Ticker ranking" in output
+    assert "AAPL" in output
+    assert "MSFT" in output
 
 
 def test_public_simulate_auto_source_handles_multiindex_download(monkeypatch, capsys):

@@ -53,16 +53,18 @@ def test_readme_offline_examples_run(capsys) -> None:
     sample_data = str(REPO_ROOT / "sample_data")
 
     simulate_exit = public_main(
-        ["simulate", "AAPL", "--source", "offline", "--data-path", sample_data]
+        ["simulate", "AAPL", "MSFT", "--source", "offline", "--data-path", sample_data]
     )
     simulate_output = capsys.readouterr().out
     assert simulate_exit == 0
     assert "Stance:" in simulate_output
+    assert "Top idea: AAPL" in simulate_output
 
     backtest_exit = public_main(
         [
             "backtest",
             "AAPL",
+            "MSFT",
             "--source",
             "offline",
             "--data-path",
