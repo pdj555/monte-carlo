@@ -27,4 +27,4 @@ monte-carlo = "public_cli:main"
 monte-carlo-ui = "app:main"
 
 [tool.setuptools]
-py-modules = ["analysis", "ai", "app", "backtest", "cli", "cli_shared", "data", "decision", "public_cli", "simulate_cli", "simulation", "viz"]
+py-modules = ["analysis", "ai", "app", "backtest", "cli", "cli_shared", "data", "decision", "legacy_cli", "public_cli", "simulate_cli", "simulation", "viz"]

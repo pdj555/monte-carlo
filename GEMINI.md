@@ -16,7 +16,8 @@ The project is structured into focused modules:
 * **`public_cli.py`**: Public CLI implementation for `monte-carlo simulate|backtest`.
 * **`simulate_cli.py`**: Shared simulation workflow used by public and legacy entrypoints.
 * **`cli_shared.py`**: Shared parser and rendering helpers for CLI surfaces.
-* **`cli.py`**: Deprecated simulation wrapper and compatibility facade.
+* **`legacy_cli.py`**: Full deprecated simulation parser and runner used by the thin wrapper.
+* **`cli.py`**: Thin deprecated simulation wrapper and compatibility facade.
 * **`backtest.py`**: Walk-forward validation engine and deprecated backtest wrapper.
 * **`MonteCarlo.py`**: Deprecated single-ticker compatibility wrapper.
 * **`simulation.py`**: Core simulation logic (`simulate_prices` for historical bootstrap and `simulate_gbm` for GBM).

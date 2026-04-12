@@ -5,10 +5,13 @@ This project does two things:
 1. simulate forward outcomes for current ideas
 2. backtest the decision process on historical data
 
-There are two entrypoints:
+The main CLI has two commands:
 
 - `monte-carlo simulate` for current opportunities
 - `monte-carlo backtest` for walk-forward validation
+
+Optional browser entrypoint:
+
 - `monte-carlo-ui` for a lean browser UI
 
 ## Install
@@ -154,10 +157,11 @@ Legacy script entrypoints remain available as deprecated compatibility wrappers.
 ## Architecture
 
 - `app.py` - lean Flask UI for the browser surface and local `monte-carlo-ui` entrypoint
+- `legacy_cli.py` - full deprecated simulation parser and runner behind the thin `cli.py` facade
 - `public_cli.py` - public `monte-carlo simulate|backtest` parser and runners
 - `simulate_cli.py` - shared simulation workflow used by public and legacy entrypoints
 - `cli_shared.py` - shared parser and rendering helpers for CLI surfaces
-- `cli.py` - deprecated simulation wrapper and compatibility facade
+- `cli.py` - thin deprecated simulation compatibility facade
 - `backtest.py` - walk-forward engine plus legacy wrapper
 - `simulation.py` - vectorized simulation engines
 - `analysis.py` - summary statistics

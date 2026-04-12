@@ -3,10 +3,11 @@
 ## Project Structure & Module Organization
 
 - `app.py`: lean Flask UI for the browser surface and local `monte-carlo-ui` entrypoint.
+- `legacy_cli.py`: full deprecated simulation parser and runner behind the thin `cli.py` facade.
 - `public_cli.py`: public CLI implementation for `monte-carlo simulate|backtest`.
 - `simulate_cli.py`: shared simulation workflow used by public and legacy entrypoints.
 - `cli_shared.py`: shared parser and rendering helpers for CLI surfaces.
-- `cli.py`: deprecated simulation wrapper and compatibility facade.
+- `cli.py`: thin deprecated simulation wrapper and compatibility facade.
 - `backtest.py`: walk-forward engine plus deprecated backtest wrapper.
 - `MonteCarlo.py`: legacy single-ticker script (kept for backwards compatibility).
 - `simulation.py`: vectorized simulation engines (`simulate_prices`, `simulate_gbm`).

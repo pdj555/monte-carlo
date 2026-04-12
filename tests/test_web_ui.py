@@ -79,7 +79,7 @@ def test_flask_app_renders_default_demo() -> None:
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Current idea or historical test." in body
+    assert "Simulate current ideas or backtest history." in body
     assert "Live first" in body
     assert "Terminal output" in body
     assert web_app.SOURCE_NOTES["auto"] in body

@@ -14,23 +14,24 @@ interface.
 
 ## Current Opportunities
 
-### 1. Keep shrinking legacy wrapper surface area
-
-The installed entrypoint now runs through `public_cli.py`, with shared workflow
-living in `simulate_cli.py` and shared helpers in `cli_shared.py`. The next
-useful step would be trimming dead wrapper-era helpers from `cli.py` so the
-deprecated path stays obviously small.
-
-### 2. Expand offline fixture coverage
+### 1. Expand offline fixture coverage
 
 Most tests use `sample_data/AAPL.csv`, which keeps the suite fast and
 deterministic. Adding a second fixture with a different return profile would
 broaden regression coverage for ranking, guardrail, and backtest paths without
 introducing live network dependency.
 
-### 3. Document output interpretation
+### 2. Document output interpretation
 
 The public README now shows how to run the two jobs. A short follow-on doc that
 explains how to read the decision summary, ranking table, and backtest metrics
 would help new users move from "the command ran" to "I know what to do with the
 result."
+
+### 3. Surface actual source provenance
+
+`--source auto` now behaves correctly, but the CLI and browser UI still describe
+the requested source mode rather than the source that ultimately supplied the
+prices. A small follow-on improvement would be surfacing whether a run used live
+downloads or local CSV fallback so operators can tell what data they are acting
+on.

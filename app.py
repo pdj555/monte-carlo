@@ -496,7 +496,7 @@ PAGE_TEMPLATE = """
       <header class="masthead">
         <div>
           <p class="eyebrow">Monte Carlo</p>
-          <h1>Current idea or historical test.</h1>
+          <h1>Simulate current ideas or backtest history.</h1>
           <p class="lede">
             Start with the sample. Switch to live prices or your own CSVs when you're ready.
           </p>

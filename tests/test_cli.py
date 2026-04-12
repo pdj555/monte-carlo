@@ -68,6 +68,8 @@ def test_public_help_explains_auto_source(argv, capsys):
     captured = capsys.readouterr()
     assert "auto tries live first" in captured.out
     assert "local fallback" in captured.out
+    assert "<TICKER>.csv" in captured.out
+    assert "Date and Close columns" in captured.out
 
 
 def test_public_simulate_auto_source_handles_multiindex_download(monkeypatch, capsys):

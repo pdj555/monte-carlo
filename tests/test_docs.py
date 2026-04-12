@@ -43,6 +43,12 @@ def test_readme_offline_backtest_example_uses_sample_data_friendly_window() -> N
     assert "--scenarios 10" in text
 
 
+def test_readme_distinguishes_cli_commands_from_browser_entrypoint() -> None:
+    text = README_PATH.read_text(encoding="utf-8")
+    assert "The main CLI has two commands:" in text
+    assert "Optional browser entrypoint:" in text
+
+
 def test_readme_offline_examples_run(capsys) -> None:
     sample_data = str(REPO_ROOT / "sample_data")
 

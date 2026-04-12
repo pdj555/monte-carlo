@@ -19,7 +19,11 @@ from cli_shared import (
     positive_int,
     render_detailed_simulation_tables,
 )
-from simulate_cli import maybe_show_simulation_plots, run as run_simulation
+from simulate_cli import (
+    build_simulation_args,
+    maybe_show_simulation_plots,
+    run as run_simulation,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -87,7 +91,10 @@ def build_public_parser() -> argparse.ArgumentParser:
         "--data-path",
         type=str,
         default=None,
-        help="Directory or CSV file for offline runs or auto-mode local fallback.",
+        help=(
+            "Directory of <TICKER>.csv files or single CSV file for offline runs "
+            "or auto-mode local fallback. CSVs need Date and Close columns."
+        ),
     )
     simulate_parser.add_argument(
         "--output",
@@ -171,7 +178,10 @@ def build_public_parser() -> argparse.ArgumentParser:
         "--data-path",
         type=str,
         default=None,
-        help="Directory or CSV file for offline runs or auto-mode local fallback.",
+        help=(
+            "Directory of <TICKER>.csv files or single CSV file for offline runs "
+            "or auto-mode local fallback. CSVs need Date and Close columns."
+        ),
     )
     backtest_parser.add_argument(
         "--output",
@@ -222,59 +232,25 @@ def _public_tickers_to_csv_arg(tickers: list[str]) -> str:
 def _build_public_simulate_legacy_args(args: argparse.Namespace) -> argparse.Namespace:
     prefer_local, allow_local_fallback = _source_settings(str(args.source))
     should_make_plots = bool(args.show or args.output)
-    return argparse.Namespace(
-        journal_file=None,
-        policy_file=None,
+    return build_simulation_args(
         tickers=_public_tickers_to_csv_arg(list(args.tickers)),
         days=int(args.days),
         scenarios=int(args.scenarios),
-        max_paths=100,
         no_plots=not should_make_plots,
-        dt=1.0,
-        block_size=1,
-        shock_probability=0.0,
-        shock_return=-0.15,
         seed=args.seed,
         model=str(args.model),
-        fundamental_probability=None,
-        market_price=None,
-        fundamental_certainty=100.0,
-        prob_mean_reversion=0.2,
-        prob_daily_volatility=0.03,
-        start=None,
-        end=None,
         output=args.output,
-        cache_dir=None,
-        refresh_cache=False,
-        save_simulations=False,
         offline_path=args.data_path,
         offline_only=prefer_local,
         allow_local_fallback=allow_local_fallback,
         show=bool(args.show),
-        ai_summary=False,
-        ai_model="gpt-4o-mini",
-        annual_cash_yield=0.04,
-        min_expected_return=0.0,
-        min_prob_up=0.5,
-        portfolio_risk_budget_pct=0.02,
-        max_var_95_pct=0.25,
-        max_drawdown_q95_pct=None,
-        target_return_pct=None,
-        max_loss_pct=None,
-        min_prob_hit_target=None,
-        max_prob_breach_loss=None,
-        capital=None,
-        allow_fractional_shares=False,
-        minimal=False,
-        strict=False,
-        verbose=False,
         details=bool(args.details),
     )
 
 
 def _build_public_backtest_legacy_args(args: argparse.Namespace) -> argparse.Namespace:
     prefer_local, allow_local_fallback = _source_settings(str(args.source))
-    return argparse.Namespace(
+    return backtest_cli.build_backtest_args(
         tickers=_public_tickers_to_csv_arg(list(args.tickers)),
         lookback_days=int(args.lookback),
         holding_days=int(args.hold),
@@ -283,20 +259,10 @@ def _build_public_backtest_legacy_args(args: argparse.Namespace) -> argparse.Nam
         model=str(args.model),
         scenarios=int(args.scenarios),
         seed=args.seed,
-        start=None,
-        end=None,
         offline_path=args.data_path,
         offline_only=prefer_local,
         allow_local_fallback=allow_local_fallback,
         output=args.output,
-        transaction_cost_bps=10.0,
-        annual_cash_yield=0.04,
-        min_expected_return=0.0,
-        min_prob_up=0.5,
-        max_var_95_pct=0.25,
-        max_drawdown_q95_pct=None,
-        portfolio_risk_budget_pct=0.02,
-        verbose=False,
         details=bool(args.details),
     )
 

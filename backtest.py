@@ -26,6 +26,40 @@ from viz import plot_equity_curve
 
 LOGGER = logging.getLogger(__name__)
 
+BACKTEST_ARG_DEFAULTS: dict[str, object] = {
+    "tickers": "AAPL",
+    "lookback_days": 60,
+    "holding_days": 20,
+    "rebalance_every": 20,
+    "top_k": 1,
+    "model": "historical",
+    "scenarios": 1000,
+    "seed": None,
+    "start": None,
+    "end": None,
+    "offline_path": None,
+    "offline_only": False,
+    "allow_local_fallback": True,
+    "output": None,
+    "transaction_cost_bps": 10.0,
+    "annual_cash_yield": 0.04,
+    "min_expected_return": 0.0,
+    "min_prob_up": 0.5,
+    "max_var_95_pct": 0.25,
+    "max_drawdown_q95_pct": None,
+    "portfolio_risk_budget_pct": 0.02,
+    "verbose": False,
+    "details": False,
+}
+
+
+def build_backtest_args(**overrides: object) -> argparse.Namespace:
+    """Return a full backtest namespace with public-surface defaults."""
+
+    values = dict(BACKTEST_ARG_DEFAULTS)
+    values.update(overrides)
+    return argparse.Namespace(**values)
+
 
 def _positive_int(value: str) -> int:
     parsed = int(value)
