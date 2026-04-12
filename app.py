@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from public_cli import (  # noqa: E402
+    describe_price_sources,
     execute_public_backtest,
     execute_public_simulate,
     format_public_backtest_output,
@@ -889,6 +890,9 @@ def _build_simulation_state(
     stance = str(action_plan.get("stance", "Decision ready"))
     title = STANCE_LABELS.get(stance, stance.replace("_", " ").title())
     summary = str(action_plan.get("headline", "A fresh read is ready."))
+    source_note = describe_price_sources(result.get("price_sources")) or SOURCE_NOTES[
+        ui_request.source
+    ]
 
     if result["summaries"].empty and notes:
         title = "No decision yet"
@@ -896,7 +900,7 @@ def _build_simulation_state(
 
     return PageState(
         request=ui_request,
-        source_note=SOURCE_NOTES[ui_request.source],
+        source_note=source_note,
         eyebrow="Simulate",
         title=title,
         summary=summary,
@@ -956,10 +960,13 @@ def _build_backtest_state(
         ),
     )
     chart_data_url, chart_alt = _backtest_chart_payload(result)
+    source_note = describe_price_sources(result.get("price_sources")) or SOURCE_NOTES[
+        ui_request.source
+    ]
 
     return PageState(
         request=ui_request,
-        source_note=SOURCE_NOTES[ui_request.source],
+        source_note=source_note,
         eyebrow="Backtest",
         title=_backtest_headline(summary),
         summary=(

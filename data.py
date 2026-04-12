@@ -21,10 +21,51 @@ import yfinance as yf
 
 # Default directory containing fallback CSV data
 _FALLBACK_DIR = Path(__file__).resolve().parent / "sample_data"
+_PRICE_SOURCE_ATTR = "price_source"
 
 
 class PriceDataError(Exception):
     """Raised when price data cannot be retrieved."""
+
+
+def _with_price_source(
+    prices: pd.Series,
+    *,
+    kind: str,
+    path: Path | None = None,
+    used_fallback: bool = False,
+    is_sample_data: bool = False,
+) -> pd.Series:
+    tagged = prices.copy()
+    tagged.attrs[_PRICE_SOURCE_ATTR] = {
+        "kind": kind,
+        "path": str(path) if path is not None else None,
+        "used_fallback": used_fallback,
+        "is_sample_data": is_sample_data,
+    }
+    return tagged
+
+
+def get_price_source(prices: pd.Series) -> dict[str, object] | None:
+    """Return normalized provenance metadata attached to a fetched price series."""
+
+    raw = prices.attrs.get(_PRICE_SOURCE_ATTR)
+    if not isinstance(raw, dict):
+        return None
+
+    return {
+        "kind": str(raw.get("kind", "")),
+        "path": raw.get("path"),
+        "used_fallback": bool(raw.get("used_fallback", False)),
+        "is_sample_data": bool(raw.get("is_sample_data", False)),
+    }
+
+
+def _is_bundled_sample_path(path: Path) -> bool:
+    try:
+        return path.resolve().is_relative_to(_FALLBACK_DIR.resolve())
+    except OSError:
+        return False
 
 
 def _parse_date(value: Optional[str], *, label: str) -> Optional[pd.Timestamp]:
@@ -44,6 +85,7 @@ def _parse_date(value: Optional[str], *, label: str) -> Optional[pd.Timestamp]:
 def _slice_prices(
     prices: pd.Series, start: Optional[str], end: Optional[str]
 ) -> pd.Series:
+    attrs = dict(prices.attrs)
     start_ts = _parse_date(start, label="start")
     end_ts = _parse_date(end, label="end")
     if start_ts is not None and end_ts is not None and start_ts > end_ts:
@@ -62,6 +104,7 @@ def _slice_prices(
             "No price data is available for the requested date range. "
             "Try a wider range or remove the date filter."
         )
+    prices.attrs = attrs
     return prices
 
 
@@ -219,7 +262,15 @@ def fetch_prices(
     cache_file = cache_dir / f"{ticker}.csv" if cache_dir is not None else None
 
     if cache_file is not None and cache_file.exists() and not refresh_cache:
-        return _slice_prices(_load_prices_from_csv(cache_file), start, end)
+        return _slice_prices(
+            _with_price_source(
+                _load_prices_from_csv(cache_file),
+                kind="cache",
+                path=cache_file,
+            ),
+            start,
+            end,
+        )
 
     attempts = 0
     last_error: Optional[Exception] = None
@@ -247,7 +298,11 @@ def fetch_prices(
                     except Exception:
                         pass
 
-                return _slice_prices(close, start, end)
+                return _slice_prices(
+                    _with_price_source(close, kind="live"),
+                    start,
+                    end,
+                )
             except Exception as exc:  # network error or other issues
                 last_error = exc
                 attempts += 1
@@ -296,7 +351,21 @@ def fetch_prices(
 
     for candidate in local_candidates:
         if candidate.exists():
-            return _slice_prices(_load_prices_from_csv(candidate), start, end)
+            if cache_file is not None and candidate == cache_file:
+                tagged = _with_price_source(
+                    _load_prices_from_csv(candidate),
+                    kind="cache",
+                    path=candidate,
+                )
+            else:
+                tagged = _with_price_source(
+                    _load_prices_from_csv(candidate),
+                    kind="local",
+                    path=candidate,
+                    used_fallback=last_error is not None and not prefer_local,
+                    is_sample_data=_is_bundled_sample_path(candidate),
+                )
+            return _slice_prices(tagged, start, end)
 
     attempted = ", ".join(str(path) for path in local_candidates)
     if last_error is None:

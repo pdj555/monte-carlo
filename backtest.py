@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from analysis import summarize_final_prices
-from data import PriceDataError, fetch_prices
+from data import PriceDataError, fetch_prices, get_price_source
 from decision import (
     apply_risk_guards,
     enforce_portfolio_risk_budget,
@@ -119,8 +119,9 @@ def _load_price_history(
     offline_path: Path | None,
     offline_only: bool,
     allow_local_fallback: bool,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, dict[str, dict[str, object]]]:
     price_frames: list[pd.Series] = []
+    price_sources: dict[str, dict[str, object]] = {}
     for ticker in tickers:
         prices = fetch_prices(
             ticker,
@@ -129,7 +130,11 @@ def _load_price_history(
             offline_path=offline_path,
             prefer_local=offline_only,
             allow_local_fallback=allow_local_fallback,
-        ).rename(ticker)
+        )
+        source_info = get_price_source(prices)
+        if source_info is not None:
+            price_sources[ticker] = source_info
+        prices = prices.rename(ticker)
         price_frames.append(prices)
 
     combined = pd.concat(price_frames, axis=1, join="inner").dropna()
@@ -138,7 +143,7 @@ def _load_price_history(
             "No overlapping price history was available for the requested tickers. "
             "Try a different date range or use tickers with shared history."
         )
-    return combined.sort_index()
+    return combined.sort_index(), price_sources
 
 
 def _select_backtest_allocations(
@@ -237,7 +242,7 @@ def run_walk_forward_backtest(
             "Use values greater than zero."
         )
 
-    price_history = _load_price_history(
+    price_history, price_sources = _load_price_history(
         tickers=tickers,
         start=start,
         end=end,
@@ -374,6 +379,7 @@ def run_walk_forward_backtest(
         "summary": summary,
         "rebalance_log": rebalance_log,
         "equity_curve": equity_curve,
+        "price_sources": price_sources,
     }
 
 

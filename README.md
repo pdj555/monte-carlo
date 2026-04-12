@@ -124,6 +124,9 @@ Use `--source` to pick how prices are loaded:
 - `offline` uses local CSV files only
 - `online` uses live downloads only
 
+Run results tell you which source actually supplied the prices, so `auto`
+stays honest when it falls back.
+
 Local CSVs should include `Date` and `Close` columns. By default the repo looks in:
 
 ```text

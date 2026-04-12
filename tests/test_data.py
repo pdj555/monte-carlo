@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 import data
-from data import PriceDataError, fetch_prices
+from data import PriceDataError, fetch_prices, get_price_source
 
 
 def _write_sample_csv(path: Path, ticker: str) -> Path:
@@ -74,6 +74,12 @@ def test_fetch_prices_normalizes_multiindex_close_from_yfinance(monkeypatch):
     assert isinstance(prices, pd.Series)
     assert prices.name == "Close"
     assert prices.iloc[-1] == 13.0
+    assert get_price_source(prices) == {
+        "kind": "live",
+        "path": None,
+        "used_fallback": False,
+        "is_sample_data": False,
+    }
 
 
 def test_fetch_prices_supports_offline_directory(tmp_path):
@@ -102,6 +108,32 @@ def test_fetch_prices_supports_bundled_secondary_sample_fixture() -> None:
     assert prices.index.is_monotonic_increasing
     assert float(prices.iloc[0]) == 210.0
     assert float(prices.iloc[-1]) == 198.0
+    assert get_price_source(prices) == {
+        "kind": "local",
+        "path": str((Path(data.__file__).resolve().parent / "sample_data" / "MSFT.csv")),
+        "used_fallback": False,
+        "is_sample_data": True,
+    }
+
+
+def test_fetch_prices_marks_local_fallback_source(tmp_path, monkeypatch):
+    offline_dir = tmp_path / "offline"
+    offline_dir.mkdir()
+    csv_path = _write_sample_csv(offline_dir, "AAPL")
+
+    def _download(*_args, **_kwargs):
+        raise RuntimeError("network unavailable")
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    prices = fetch_prices("AAPL", offline_path=offline_dir)
+
+    assert get_price_source(prices) == {
+        "kind": "local",
+        "path": str(csv_path),
+        "used_fallback": True,
+        "is_sample_data": False,
+    }
 
 
 def test_fetch_prices_rejects_start_after_end(tmp_path):

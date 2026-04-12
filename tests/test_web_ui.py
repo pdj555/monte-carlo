@@ -48,6 +48,7 @@ def test_create_page_state_for_default_demo_returns_chart() -> None:
     assert state.chart_data_url is not None
     assert state.chart_data_url.startswith("data:image/png;base64,")
     assert state.title
+    assert state.source_note == "Data source: bundled sample data."
 
 
 def test_create_page_state_live_first_handles_download_shape(monkeypatch) -> None:
@@ -70,6 +71,7 @@ def test_create_page_state_live_first_handles_download_shape(monkeypatch) -> Non
     assert state.error is None
     assert state.chart_data_url is not None
     assert "Live prices weren’t available" not in state.summary
+    assert state.source_note == "Data source: live download."
 
 
 def test_create_page_state_local_sample_data_handles_multiple_tickers() -> None:
@@ -83,8 +85,21 @@ def test_create_page_state_local_sample_data_handles_multiple_tickers() -> None:
 
     assert state.error is None
     assert state.chart_data_url is not None
+    assert state.source_note == "Data source: bundled sample data for AAPL, MSFT."
     assert "Summary for AAPL" in state.details_text
     assert "Summary for MSFT" in state.details_text
+
+
+def test_create_page_state_auto_fallback_reports_bundled_sample(monkeypatch) -> None:
+    def _download(*_args, **_kwargs):
+        raise RuntimeError("network unavailable")
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    state = web_app.create_page_state(web_app.UIRequest(source="auto"))
+
+    assert state.error is None
+    assert state.source_note == "Data source: bundled sample data (fallback)."
 
 
 def test_flask_app_renders_default_demo() -> None:

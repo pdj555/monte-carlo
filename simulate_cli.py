@@ -16,7 +16,7 @@ import pandas as pd
 
 from ai import OpenAIConfigurationError, OpenAIRequestError, generate_ai_summary
 from analysis import summarize_equal_weight_portfolio, summarize_final_prices
-from data import PriceDataError, fetch_prices
+from data import PriceDataError, fetch_prices, get_price_source
 from decision import (
     apply_risk_guards,
     build_action_plan,
@@ -320,6 +320,7 @@ def run(
     combined_frames: list[pd.DataFrame] = []
     summaries: dict[str, pd.Series] = {}
     current_prices: dict[str, float] = {}
+    price_sources: dict[str, dict[str, object]] = {}
     artefacts: dict[str, dict[str, str]] = {}
     errors: list[dict[str, str]] = []
     ai_summaries: dict[str, str] = {}
@@ -352,6 +353,9 @@ def run(
                 errors.append({"ticker": ticker, "error": message})
                 continue
 
+            source_info = get_price_source(prices)
+            if source_info is not None:
+                price_sources[ticker] = source_info
             prices = prices.dropna()
             returns = prices.pct_change().dropna()
             if returns.empty:
@@ -519,6 +523,7 @@ def run(
             execution_plan.to_dict(orient="index") if not execution_plan.empty else {}
         ),
         "portfolio_risk_budget_pct": float(args.portfolio_risk_budget_pct),
+        "price_sources": price_sources,
         "policy": policy,
         "policy_crc32": policy_crc32,
         "action_plan": action_plan,
@@ -554,6 +559,7 @@ def run(
         "simulations": combined,
         "summaries": summary_df,
         "portfolio_summary": portfolio_summary,
+        "price_sources": price_sources,
         "report": report,
     }
 

@@ -128,6 +128,7 @@ def test_public_simulate_auto_source_handles_multiindex_download(monkeypatch, ca
 
     assert exit_code == 0
     assert "Stance:" in output
+    assert "Data source: live download." in output
 
 
 def test_public_backtest_auto_source_handles_multiindex_download(monkeypatch, capsys):
@@ -167,6 +168,38 @@ def test_public_backtest_auto_source_handles_multiindex_download(monkeypatch, ca
 
     assert exit_code == 0
     assert "Strategy return:" in output
+    assert "Data source: live download." in output
+
+
+def test_public_simulate_auto_source_reports_bundled_fallback(monkeypatch, capsys):
+    sample_data = str(Path(__file__).resolve().parents[1] / "sample_data")
+
+    def _download(*_args, **_kwargs):
+        raise RuntimeError("network unavailable")
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    exit_code = main(
+        [
+            "simulate",
+            "AAPL",
+            "--source",
+            "auto",
+            "--data-path",
+            sample_data,
+            "--days",
+            "5",
+            "--scenarios",
+            "10",
+            "--details",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Data source: bundled sample data (fallback)." in output
+    assert "Source details" in output
+    assert "AAPL: bundled sample data (fallback)" in output
 
 
 def test_public_simulate_matches_legacy_core_outputs(tmp_path, capsys):

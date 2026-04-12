@@ -269,6 +269,68 @@ def _build_public_backtest_legacy_args(args: argparse.Namespace) -> argparse.Nam
     )
 
 
+def _normalize_price_sources(
+    price_sources: object,
+) -> dict[str, dict[str, object]]:
+    if not isinstance(price_sources, dict):
+        return {}
+
+    normalized: dict[str, dict[str, object]] = {}
+    for ticker, payload in price_sources.items():
+        if isinstance(ticker, str) and isinstance(payload, dict):
+            normalized[ticker] = payload
+    return normalized
+
+
+def _price_source_label(source: dict[str, object]) -> str:
+    kind = str(source.get("kind", ""))
+    if kind == "live":
+        return "live download"
+    if kind == "cache":
+        return "cached download"
+
+    label = "bundled sample data" if bool(source.get("is_sample_data")) else "local CSV"
+    if bool(source.get("used_fallback")):
+        return f"{label} (fallback)"
+    return label
+
+
+def describe_price_sources(price_sources: object) -> str | None:
+    normalized = _normalize_price_sources(price_sources)
+    if not normalized:
+        return None
+
+    grouped: dict[str, list[str]] = {}
+    for ticker in sorted(normalized):
+        label = _price_source_label(normalized[ticker])
+        grouped.setdefault(label, []).append(ticker)
+
+    if len(normalized) == 1:
+        label = _price_source_label(next(iter(normalized.values())))
+        return f"Data source: {label}."
+
+    if len(grouped) == 1:
+        label, tickers = next(iter(grouped.items()))
+        return f"Data source: {label} for {', '.join(tickers)}."
+
+    parts = [f"{', '.join(tickers)} from {label}" for label, tickers in grouped.items()]
+    return "Data source: " + "; ".join(parts) + "."
+
+
+def _price_source_details(price_sources: object) -> list[str]:
+    normalized = _normalize_price_sources(price_sources)
+    details: list[str] = []
+    for ticker in sorted(normalized):
+        source = normalized[ticker]
+        path = source.get("path")
+        label = _price_source_label(source)
+        if isinstance(path, str) and path:
+            details.append(f"{ticker}: {label} -> {path}")
+        else:
+            details.append(f"{ticker}: {label}")
+    return details
+
+
 def format_public_simulation_output(
     result: dict[str, Any],
     *,
@@ -281,6 +343,11 @@ def format_public_simulation_output(
         f"Stance: {action_plan['stance']}",
         action_plan["headline"],
     ]
+    source_summary = describe_price_sources(
+        result.get("price_sources", report.get("price_sources"))
+    )
+    if source_summary:
+        lines.append(source_summary)
 
     if action_plan["primary_pick"] is not None:
         pick = action_plan["primary_pick"]
@@ -322,6 +389,11 @@ def format_public_simulation_output(
         detail_text = detail_buffer.getvalue().strip()
         if detail_text:
             lines.extend(["", detail_text])
+        source_details = _price_source_details(
+            result.get("price_sources", report.get("price_sources"))
+        )
+        if source_details:
+            lines.extend(["", "Source details", *source_details])
 
     if output:
         lines.append(f"Saved outputs to {Path(output).expanduser()}")
@@ -356,6 +428,9 @@ def format_public_backtest_output(
         f"vs equal weight: {float(summary['excess_return_vs_equal_weight']):.1%}",
         f"vs cash: {float(summary['excess_return_vs_cash']):.1%}",
     ]
+    source_summary = describe_price_sources(result.get("price_sources"))
+    if source_summary:
+        lines.append(source_summary)
 
     if details:
         lines.append("")
@@ -365,6 +440,9 @@ def format_public_backtest_output(
                 float_format=lambda value: f"{value:0.4f}"
             )
         )
+        source_details = _price_source_details(result.get("price_sources"))
+        if source_details:
+            lines.extend(["", "Source details", *source_details])
 
     if output:
         lines.append(f"Saved outputs to {Path(output).expanduser()}")

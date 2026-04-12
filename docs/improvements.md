@@ -21,17 +21,16 @@ explains how to read the decision summary, ranking table, and backtest metrics
 would help new users move from "the command ran" to "I know what to do with the
 result."
 
-### 2. Surface actual source provenance
-
-`--source auto` now behaves correctly, but the CLI and browser UI still describe
-the requested source mode rather than the source that ultimately supplied the
-prices. A small follow-on improvement would be surfacing whether a run used live
-downloads or local CSV fallback so operators can tell what data they are acting
-on.
-
-### 3. Keep sample-data smoke tests broad
+### 2. Keep sample-data smoke tests broad
 
 The bundled offline path now covers `AAPL.csv` and `MSFT.csv`. The next useful
 follow-on would be keeping docs, install smoke tests, and browser checks aligned
 with those fixtures whenever the sample data changes so the deterministic path
 stays trustworthy.
+
+### 3. Keep source provenance visible in saved artefacts
+
+The CLI and browser UI now tell the operator which source actually supplied the
+prices. A useful follow-on would be persisting that provenance into backtest
+artefacts and any future explanatory docs so offline, cached, and live runs
+stay auditable after the terminal closes.
