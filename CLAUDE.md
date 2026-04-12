@@ -10,22 +10,23 @@ Monte Carlo stock price simulation toolkit using historical data from Yahoo Fina
 
 ### Running Simulations
 
-**Legacy single-ticker workflow:**
+**Public CLI:**
 ```bash
-python MonteCarlo.py --ticker AAPL --days 252 --scenarios 1000
+monte-carlo simulate AAPL MSFT --days 252 --scenarios 5000 --model gbm --output ./results --seed 42
 ```
 
-**Advanced CLI with multi-ticker support:**
 ```bash
-python cli.py --tickers AAPL,MSFT --days 252 --scenarios 5000 --model gbm --output ./results --seed 42
+monte-carlo backtest AAPL MSFT --lookback 60 --hold 20 --rebalance 20 --model gbm --scenarios 1000 --seed 42
 ```
 
 Key CLI options:
 - `--model historical` (default) or `--model gbm` for geometric Brownian motion
-- `--offline-only` to skip network requests and use local CSV data
-- `--offline-path DIR` to specify custom CSV directory
-- `--no-show` to skip displaying plots (useful for headless/CI environments)
+- `--source offline` to use local CSV data only
+- `--source auto` to try live data first, then local CSV files
+- `--data-path DIR` to specify a custom CSV directory or file
+- `--show` to display plots on screen
 - `--seed N` for reproducible simulations
+- `--details` for full tables and secondary metrics
 
 ### Testing
 
@@ -46,9 +47,9 @@ pytest -v
 
 ### Environment Setup
 
-Install dependencies:
+Install the package and console script:
 ```bash
-pip install -r requirements.txt
+python3 -m pip install -e .
 ```
 
 For headless environments (no GUI):
@@ -71,7 +72,7 @@ The codebase is organized into focused modules with clear separation of concerns
 **Data Fetching (`data.py`):**
 - `fetch_prices()` retrieves closing prices via yfinance with automatic retry logic
 - Falls back to local CSV files in `sample_data/` when network requests fail
-- Use `prefer_local=True` to skip network entirely (controlled by `--offline-only` CLI flag)
+- Use `prefer_local=True` to skip network entirely (controlled by `--source offline` in the public CLI)
 - Raises `PriceDataError` on failures
 - CSV files must have `Date` and `Close` columns
 
@@ -87,11 +88,18 @@ The codebase is organized into focused modules with clear separation of concerns
 - Support MultiIndex columns for multi-ticker DataFrames
 
 **Command-Line Interfaces:**
-- `MonteCarlo.py` - Simple single-ticker script, good for quick tests
-- `cli.py` - Full-featured interface with multi-ticker, model selection, output management
-  - `build_parser()` defines argparse structure
-  - `run(args)` executes the workflow and returns `{"simulations": DataFrame, "summaries": DataFrame}`
-  - Can be imported as a library for programmatic use
+- `monte-carlo` - Public entrypoint with `simulate` and `backtest` subcommands
+- `public_cli.py` - Public CLI parser and command runners
+  - `build_public_parser()` defines the public argparse structure
+  - `run_public_simulate(args)` executes the public simulation surface
+  - `main()` is the installed `monte-carlo` entrypoint
+- `simulate_cli.py` - Shared simulation workflow used by both CLI surfaces
+- `legacy_cli.py` - Full deprecated simulation parser and runner used by the old wrapper
+- `cli_shared.py` - Shared version, validation, and detailed-rendering helpers
+- `cli.py` - Thin deprecated compatibility facade for `python cli.py ...`
+  - `legacy_main()` preserves the old wrapper flow
+- `backtest.py` - Walk-forward engine plus deprecated wrapper entrypoint
+- `MonteCarlo.py` - Deprecated single-ticker compatibility wrapper
 
 ### Data Flow
 

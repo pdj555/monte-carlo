@@ -2,7 +2,13 @@
 
 ## Project Structure & Module Organization
 
-- `cli.py`: primary entrypoint for multi-ticker runs, model selection (`historical`/`gbm`), and saving plots.
+- `app.py`: lean Flask UI for the browser surface and local `monte-carlo-ui` entrypoint.
+- `legacy_cli.py`: full deprecated simulation parser and runner behind the thin `cli.py` facade.
+- `public_cli.py`: public CLI implementation for `monte-carlo simulate|backtest`.
+- `simulate_cli.py`: shared simulation workflow used by public and legacy entrypoints.
+- `cli_shared.py`: shared parser and rendering helpers for CLI surfaces.
+- `cli.py`: thin deprecated simulation wrapper and compatibility facade.
+- `backtest.py`: walk-forward engine plus deprecated backtest wrapper.
 - `MonteCarlo.py`: legacy single-ticker script (kept for backwards compatibility).
 - `simulation.py`: vectorized simulation engines (`simulate_prices`, `simulate_gbm`).
 - `data.py`: price retrieval via `yfinance`, plus offline CSV fallback (`sample_data/<TICKER>.csv`).
@@ -14,20 +20,27 @@
 ## Build, Test, and Development Commands
 
 ```bash
-python -m pip install -r requirements.txt
+python3 -m pip install -e .
 
-# Run simulations (network required unless offline-only)
-python cli.py --tickers AAPL,MSFT --days 252 --scenarios 5000 --model gbm --seed 42 --output results
+# Browser UI
+python3 -m pip install -e .[ui]
+monte-carlo-ui
 
-# Headless/offline mode (recommended for CI)
-python cli.py --offline-only --offline-path sample_data --no-show
+# Run simulations
+monte-carlo simulate AAPL MSFT --days 252 --scenarios 5000 --model gbm --seed 42 --output results
+
+# Walk-forward validation
+monte-carlo backtest AAPL MSFT --lookback 60 --hold 20 --rebalance 20 --model gbm --scenarios 1000 --seed 42
+
+# Offline mode
+monte-carlo simulate AAPL --source offline --data-path sample_data
 
 # Tests
 pytest
 pytest tests/test_simulation.py
 ```
 
-Tip: to avoid GUI pop-ups in headless environments, set `MPLBACKEND=Agg` or use `--no-show`.
+Tip: to avoid GUI pop-ups in headless environments, set `MPLBACKEND=Agg` and leave `--show` off unless you want plots on screen.
 
 ## Coding Style & Naming Conventions
 

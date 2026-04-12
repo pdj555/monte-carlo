@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -8,7 +10,17 @@ import pytest
 
 matplotlib.use("Agg")
 
-from cli import main, parse_args, run  # noqa: E402
+import backtest as backtest_module  # noqa: E402
+import cli as cli_module  # noqa: E402
+import data  # noqa: E402
+import MonteCarlo  # noqa: E402
+from cli import legacy_main, parse_args, run  # noqa: E402
+from public_cli import (  # noqa: E402
+    main,
+    parse_public_args,
+    run_public_backtest,
+    run_public_simulate,
+)
 
 
 def _write_sample_csv(directory: str, ticker: str, trend: float) -> None:
@@ -16,6 +28,351 @@ def _write_sample_csv(directory: str, ticker: str, trend: float) -> None:
     close = 100 + trend * np.arange(len(dates))
     df = pd.DataFrame({"Date": dates, "Close": close})
     df.to_csv(f"{directory}/{ticker}.csv", index=False)
+
+
+def test_public_parse_args_defaults_to_aapl():
+    args = parse_public_args(["simulate"])
+    assert args.command == "simulate"
+    assert args.tickers == ["AAPL"]
+
+
+def test_public_main_without_subcommand_prints_help_hint(capsys):
+    exit_code = main([])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "simulate" in captured.out
+    assert "backtest" in captured.out
+    assert "Choose `simulate` for current ideas" in captured.out
+
+
+def test_public_parse_args_rejects_unknown_source():
+    with pytest.raises(SystemExit):
+        parse_public_args(["simulate", "AAPL", "--source", "sideways"])
+
+
+@pytest.mark.parametrize("argv", [["simulate", "--help"], ["backtest", "--help"]])
+def test_public_help_hides_none_and_false_defaults(argv, capsys):
+    with pytest.raises(SystemExit) as exc:
+        parse_public_args(argv)
+
+    captured = capsys.readouterr()
+    assert exc.value.code == 0
+    assert "(default: None)" not in captured.out
+    assert "(default: False)" not in captured.out
+
+
+@pytest.mark.parametrize("argv", [["simulate", "--help"], ["backtest", "--help"]])
+def test_public_help_explains_auto_source(argv, capsys):
+    with pytest.raises(SystemExit):
+        parse_public_args(argv)
+
+    captured = capsys.readouterr()
+    normalized = " ".join(captured.out.split())
+    assert "auto tries live first, then falls back to local CSVs" in normalized
+    assert "local fallback for auto" in normalized
+    assert "<TICKER>.csv" in normalized
+    assert "Date and Close columns" in normalized
+
+
+def test_public_simulate_with_bundled_sample_data_ranks_distinct_profiles(capsys):
+    sample_data = str(Path(__file__).resolve().parents[1] / "sample_data")
+
+    result = run_public_simulate(
+        parse_public_args(
+            [
+                "simulate",
+                "AAPL",
+                "MSFT",
+                "--source",
+                "offline",
+                "--data-path",
+                sample_data,
+                "--days",
+                "5",
+                "--scenarios",
+                "25",
+                "--seed",
+                "42",
+                "--details",
+            ]
+        )
+    )
+
+    output = capsys.readouterr().out
+    rankings = list(result["report"]["rankings"])
+
+    assert rankings[0] == "AAPL"
+    assert rankings[-1] == "MSFT"
+    assert "Ticker ranking" in output
+    assert "AAPL" in output
+    assert "MSFT" in output
+
+
+def test_public_simulate_auto_source_handles_multiindex_download(monkeypatch, capsys):
+    dates = pd.date_range("2024-01-01", periods=40, freq="D")
+    columns = pd.MultiIndex.from_product([["Close"], ["AAPL"]])
+    downloaded = pd.DataFrame(
+        [[100.0 + idx] for idx in range(len(dates))],
+        index=dates,
+        columns=columns,
+    )
+
+    def _download(_ticker, start=None, end=None, progress=False):
+        assert progress is False
+        return downloaded
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    exit_code = main(["simulate", "AAPL", "--source", "auto", "--days", "5", "--scenarios", "10"])
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Stance:" in output
+    assert "Data source: live download." in output
+
+
+def test_public_backtest_auto_source_handles_multiindex_download(monkeypatch, capsys):
+    dates = pd.date_range("2024-01-01", periods=40, freq="D")
+    columns = pd.MultiIndex.from_product([["Close"], ["AAPL"]])
+    downloaded = pd.DataFrame(
+        [[100.0 + idx] for idx in range(len(dates))],
+        index=dates,
+        columns=columns,
+    )
+
+    def _download(_ticker, start=None, end=None, progress=False):
+        assert progress is False
+        return downloaded
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    exit_code = main(
+        [
+            "backtest",
+            "AAPL",
+            "--source",
+            "auto",
+            "--lookback",
+            "10",
+            "--hold",
+            "5",
+            "--rebalance",
+            "5",
+            "--top",
+            "1",
+            "--scenarios",
+            "10",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Strategy return:" in output
+    assert "Data source: live download." in output
+
+
+def test_public_simulate_auto_source_reports_bundled_fallback(monkeypatch, capsys):
+    sample_data = str(Path(__file__).resolve().parents[1] / "sample_data")
+
+    def _download(*_args, **_kwargs):
+        raise RuntimeError("network unavailable")
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    exit_code = main(
+        [
+            "simulate",
+            "AAPL",
+            "--source",
+            "auto",
+            "--data-path",
+            sample_data,
+            "--days",
+            "5",
+            "--scenarios",
+            "10",
+            "--details",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Data source: bundled sample data (fallback)." in output
+    assert "Source details" in output
+    assert "AAPL: bundled sample data (fallback)" in output
+
+
+def test_public_simulate_matches_legacy_core_outputs(tmp_path, capsys):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
+    _write_sample_csv(str(data_dir), "MSFT", trend=0.3)
+
+    legacy = run(
+        parse_args(
+            [
+                "--tickers",
+                "AAPL,MSFT",
+                "--days",
+                "20",
+                "--scenarios",
+                "25",
+                "--seed",
+                "123",
+                "--no-show",
+                "--no-plots",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+            ]
+        ),
+        render=False,
+        display_plots=False,
+    )
+
+    public = run_public_simulate(
+        parse_public_args(
+            [
+                "simulate",
+                "AAPL",
+                "MSFT",
+                "--days",
+                "20",
+                "--scenarios",
+                "25",
+                "--seed",
+                "123",
+                "--source",
+                "offline",
+                "--data-path",
+                str(data_dir),
+            ]
+        )
+    )
+
+    output = capsys.readouterr().out
+    assert "Stance:" in output
+    assert "Ticker ranking" not in output
+    assert set(public["report"]["rankings"]) == set(legacy["report"]["rankings"])
+    assert public["report"]["action_plan"]["stance"] == legacy["report"]["action_plan"]["stance"]
+    assert public["report"]["portfolio_summary"] == legacy["report"]["portfolio_summary"]
+
+
+def test_public_backtest_matches_legacy_summary(tmp_path, capsys):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.4)
+    _write_sample_csv(str(data_dir), "MSFT", trend=0.2)
+
+    legacy = backtest_module.run(
+        backtest_module.parse_args(
+            [
+                "--tickers",
+                "AAPL,MSFT",
+                "--lookback-days",
+                "10",
+                "--holding-days",
+                "5",
+                "--rebalance-every",
+                "5",
+                "--top-k",
+                "1",
+                "--scenarios",
+                "100",
+                "--seed",
+                "11",
+                "--offline-path",
+                str(data_dir),
+                "--offline-only",
+            ]
+        ),
+        render=False,
+    )
+
+    public = run_public_backtest(
+        parse_public_args(
+            [
+                "backtest",
+                "AAPL",
+                "MSFT",
+                "--lookback",
+                "10",
+                "--hold",
+                "5",
+                "--rebalance",
+                "5",
+                "--top",
+                "1",
+                "--scenarios",
+                "100",
+                "--seed",
+                "11",
+                "--source",
+                "offline",
+                "--data-path",
+                str(data_dir),
+                "--details",
+            ]
+        )
+    )
+
+    output = capsys.readouterr().out
+    assert "Strategy return:" in output
+    assert public["summary"]["strategy_total_return"] == pytest.approx(
+        legacy["summary"]["strategy_total_return"]
+    )
+
+
+def test_public_simulate_saves_outputs_and_skips_plot_popups_by_default(tmp_path, capsys):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
+
+    output_dir = tmp_path / "out"
+    exit_code = main(
+        [
+            "simulate",
+            "AAPL",
+            "--days",
+            "20",
+            "--scenarios",
+            "25",
+            "--seed",
+            "123",
+            "--source",
+            "offline",
+            "--data-path",
+            str(data_dir),
+            "--output",
+            str(output_dir),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Saved outputs to" in captured.out
+    assert (output_dir / "AAPL_distribution.png").exists()
+    assert (output_dir / "AAPL_paths.png").exists()
+
+
+def test_public_simulate_reports_missing_offline_data(tmp_path, capsys):
+    missing_dir = tmp_path / "missing"
+    exit_code = main(
+        [
+            "simulate",
+            "AAPL",
+            "--source",
+            "offline",
+            "--data-path",
+            str(missing_dir),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "Skipped AAPL:" in output
+    assert "--data-path" in output
 
 
 def test_cli_runs_multi_ticker(tmp_path):
@@ -67,7 +424,7 @@ def test_cli_runs_multi_ticker(tmp_path):
     assert (output_dir / "action_plan.md").exists()
 
 
-def test_cli_main_respects_strict_mode(tmp_path):
+def test_legacy_cli_main_respects_strict_mode_and_warns(tmp_path, capsys):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
@@ -92,8 +449,34 @@ def test_cli_main_respects_strict_mode(tmp_path):
         "--offline-only",
     ]
 
-    assert main(base_args) == 0
-    assert main([*base_args, "--strict"]) == 1
+    assert legacy_main(base_args) == 0
+    assert legacy_main([*base_args, "--strict"]) == 1
+    assert "Deprecated: use `monte-carlo simulate ...`" in capsys.readouterr().err
+
+
+def test_montecarlo_wrapper_warns_and_translates_arguments(monkeypatch, capsys):
+    captured = {}
+
+    def _fake_run(args, *, render=True, display_plots=True):
+        captured["args"] = args
+        captured["render"] = render
+        captured["display_plots"] = display_plots
+        return {
+            "simulations": pd.DataFrame(),
+            "summaries": pd.DataFrame({"expected_return": [0.1]}, index=["AAPL"]),
+            "portfolio_summary": None,
+            "report": {"errors": []},
+        }
+
+    monkeypatch.setattr(cli_module, "run", _fake_run)
+
+    assert MonteCarlo.main(["--ticker", "AAPL", "--days", "10", "--scenarios", "50"]) == 0
+    stderr = capsys.readouterr().err
+    assert "Deprecated: use `monte-carlo simulate [TICKER ...]`" in stderr
+    assert captured["args"].tickers == "AAPL"
+    assert captured["args"].show is True
+    assert captured["args"].days == 10
+    assert captured["args"].scenarios == 50
 
 
 def test_cli_rejects_negative_seed():
@@ -396,8 +779,12 @@ def test_cli_applies_portfolio_risk_budget_scaling(tmp_path):
         )
     )
 
-    unconstrained_weight = sum(item["weight"] for item in unconstrained["report"]["allocations"].values())
-    constrained_weight = sum(item["weight"] for item in constrained["report"]["allocations"].values())
+    unconstrained_weight = sum(
+        item["weight"] for item in unconstrained["report"]["allocations"].values()
+    )
+    constrained_weight = sum(
+        item["weight"] for item in constrained["report"]["allocations"].values()
+    )
 
     assert constrained_weight < unconstrained_weight
     assert constrained["report"]["portfolio_risk_budget_pct"] == pytest.approx(0.01)
@@ -619,7 +1006,10 @@ def test_cli_appends_tamper_evident_decision_journal(tmp_path):
     assert len(entries) == 2
     assert entries[0]["previous_chain_hash"] is None
     assert entries[1]["previous_chain_hash"] == entries[0]["chain_hash"]
-    assert second["report"]["journal"]["previous_chain_hash"] == first["report"]["journal"]["chain_hash"]
+    assert (
+        second["report"]["journal"]["previous_chain_hash"]
+        == first["report"]["journal"]["chain_hash"]
+    )
 
 
 def test_cli_minimal_mode_prints_compact_output(tmp_path, capsys):
