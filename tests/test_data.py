@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 import data
-from data import PriceDataError, fetch_prices
+from data import PriceDataError, fetch_prices, get_price_source
 
 
 def _write_sample_csv(path: Path, ticker: str) -> Path:
@@ -59,6 +59,29 @@ def test_fetch_prices_saves_cache_after_network(tmp_path, monkeypatch):
     pd.testing.assert_series_equal(prices, cached, check_freq=False)
 
 
+def test_fetch_prices_normalizes_multiindex_close_from_yfinance(monkeypatch):
+    dates = pd.date_range("2024-01-01", periods=4, freq="D")
+    columns = pd.MultiIndex.from_product([["Close"], ["AAPL"]])
+    downloaded = pd.DataFrame([[10.0], [11.0], [12.0], [13.0]], index=dates, columns=columns)
+
+    def _download(_ticker, start=None, end=None, progress=False):
+        assert progress is False
+        return downloaded
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    prices = fetch_prices("AAPL")
+    assert isinstance(prices, pd.Series)
+    assert prices.name == "Close"
+    assert prices.iloc[-1] == 13.0
+    assert get_price_source(prices) == {
+        "kind": "live",
+        "path": None,
+        "used_fallback": False,
+        "is_sample_data": False,
+    }
+
+
 def test_fetch_prices_supports_offline_directory(tmp_path):
     offline_dir = tmp_path / "offline"
     offline_dir.mkdir()
@@ -76,6 +99,41 @@ def test_fetch_prices_offline_directory_is_case_insensitive(tmp_path):
 
     prices = fetch_prices("aapl", offline_path=offline_dir, prefer_local=True)
     assert not prices.empty
+
+
+def test_fetch_prices_supports_bundled_secondary_sample_fixture() -> None:
+    prices = fetch_prices("MSFT", prefer_local=True)
+
+    assert not prices.empty
+    assert prices.index.is_monotonic_increasing
+    assert float(prices.iloc[0]) == 210.0
+    assert float(prices.iloc[-1]) == 198.0
+    assert get_price_source(prices) == {
+        "kind": "local",
+        "path": str((Path(data.__file__).resolve().parent / "sample_data" / "MSFT.csv")),
+        "used_fallback": False,
+        "is_sample_data": True,
+    }
+
+
+def test_fetch_prices_marks_local_fallback_source(tmp_path, monkeypatch):
+    offline_dir = tmp_path / "offline"
+    offline_dir.mkdir()
+    csv_path = _write_sample_csv(offline_dir, "AAPL")
+
+    def _download(*_args, **_kwargs):
+        raise RuntimeError("network unavailable")
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    prices = fetch_prices("AAPL", offline_path=offline_dir)
+
+    assert get_price_source(prices) == {
+        "kind": "local",
+        "path": str(csv_path),
+        "used_fallback": True,
+        "is_sample_data": False,
+    }
 
 
 def test_fetch_prices_rejects_start_after_end(tmp_path):
@@ -143,3 +201,21 @@ def test_fetch_prices_rejects_invalid_dates(tmp_path):
 
     with pytest.raises(PriceDataError):
         fetch_prices("AAPL", start="not-a-date", offline_path=offline_dir, prefer_local=True)
+
+
+def test_fetch_prices_can_disable_local_fallback(tmp_path, monkeypatch):
+    offline_dir = tmp_path / "offline"
+    offline_dir.mkdir()
+    _write_sample_csv(offline_dir, "AAPL")
+
+    def _download(*_args, **_kwargs):
+        raise RuntimeError("network unavailable")
+
+    monkeypatch.setattr(data.yf, "download", _download)
+
+    with pytest.raises(PriceDataError, match="Couldn't download price data"):
+        fetch_prices(
+            "AAPL",
+            offline_path=offline_dir,
+            allow_local_fallback=False,
+        )

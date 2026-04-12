@@ -1,183 +1,204 @@
 # Monte Carlo Decision Engine
 
-This repository is for one job:
+This project does two things:
 
-1. **simulate forward outcomes**
-2. **validate the decision process with walk-forward backtests**
+1. simulate forward outcomes for current ideas
+2. backtest the decision process on historical data
 
-That is the whole product.
+The main CLI has two commands:
 
-The codebase is intentionally focused on decision-grade output:
+- `monte-carlo simulate` for current opportunities
+- `monte-carlo backtest` for walk-forward validation
 
-- scenario distributions
-- downside metrics
-- ranking and allocation rules
-- historical validation against equal-weight and cash baselines
+Optional browser entrypoint:
 
-## Why this exists
-
-Raw Monte Carlo charts are not enough.
-
-If a system recommends capital allocation, it should also answer:
-
-> would this process have worked historically after turnover and costs?
-
-This project now supports both sides of that question:
-
-- `cli.py` for **forward-looking simulation**
-- `backtest.py` for **historical walk-forward validation**
+- `monte-carlo-ui` for a lean browser UI
 
 ## Install
 
 Python 3.9+ is required.
 
-```bash
-uv pip install -r requirements.txt
-```
-
-For headless environments:
+CLI install:
 
 ```bash
-export MPLBACKEND=Agg
+python3 -m pip install -e .
 ```
 
-## Workflow 1: forward simulation
+Browser UI install:
 
-Use `cli.py` when you want to rank current opportunities from simulated future paths.
+```bash
+python3 -m pip install -e .[ui]
+```
+
+Quick start in the browser:
+
+```bash
+monte-carlo-ui
+```
+
+Then open [http://127.0.0.1:8000](http://127.0.0.1:8000). The app starts with
+the bundled AAPL demo so you land on a real decision instead of an empty page.
+
+Quick start in the CLI:
+
+```bash
+monte-carlo --help
+```
+
+## Workflow 1: simulate
+
+Use `simulate` when you want a decision-first view of one or more tickers.
+
+```bash
+monte-carlo simulate AAPL MSFT \
+  --days 252 \
+  --scenarios 5000 \
+  --model gbm \
+  --seed 42 \
+  --output results
+```
 
 ### Offline example
 
 ```bash
-python cli.py \
-  --tickers AAPL \
-  --days 60 \
-  --scenarios 2000 \
-  --model historical \
-  --offline-only \
-  --offline-path sample_data \
-  --no-show
+monte-carlo simulate AAPL MSFT \
+  --source offline \
+  --data-path sample_data
 ```
 
-### What it produces
+### What it prints
 
-- per-ticker summary statistics
-- expected return and probability of finishing above current price
-- downside metrics:
-  - VaR
-  - expected shortfall
-  - drawdown risk
-- ranking and allocation suggestions
-- equal-weight portfolio summary when multiple tickers are supplied
+- stance and headline
+- data source
+- top idea
+- avoid list when guardrails fail
+- cash buffer when conviction is low
 
-### High-value flags
+Add `--details` when you want tables and secondary metrics.
 
-| Flag | Purpose |
-| --- | --- |
-| `--model historical` / `--model gbm` | choose the simulation engine |
-| `--seed` | deterministic runs |
-| `--offline-only` | disable network and use local CSVs |
-| `--output` | save plots and reports |
-| `--min-expected-return` | hard floor for investable names |
-| `--min-prob-up` | require upside probability |
-| `--max-var-95-pct` | cap downside risk |
-| `--portfolio-risk-budget-pct` | hard cap on blended portfolio VaR |
-| `--capital` | emit executable dollar/share sizing |
+### How to read the result
 
-## Workflow 2: walk-forward validation
+- `Stance` is the posture: lean in, selective, defensive, or stand aside.
+- `Data source` tells you whether the run used live prices, local CSVs, or a fallback.
+- `Top idea` is the first name to inspect; the suggested weight is a sizing hint, not an order.
+- `Avoid` and `Cash buffer` are guardrails. Treat them as a signal to pass or keep more capital idle.
 
-Use `backtest.py` when you want proof instead of optimism.
+## Workflow 2: backtest
 
-It repeatedly:
-
-1. looks back at trailing history
-2. simulates the next holding window
-3. ranks and allocates capital
-4. measures what actually happened
-5. compounds the result against benchmarks
-
-### Offline example
+Use `backtest` when you want to validate the process instead of trusting the forecast.
 
 ```bash
-python backtest.py \
-  --tickers AAPL \
-  --lookback-days 60 \
-  --holding-days 20 \
-  --rebalance-every 20 \
-  --top-k 1 \
+monte-carlo backtest AAPL MSFT \
+  --lookback 60 \
+  --hold 20 \
+  --rebalance 20 \
   --model gbm \
   --scenarios 1000 \
-  --offline-only \
-  --offline-path sample_data \
+  --seed 42 \
   --output results/backtest
 ```
 
-### What it produces
+### Offline example
 
-- `backtest_summary.csv`
-- `rebalance_log.csv`
-- `equity_curve.csv`
-- `equity_curve.png`
+The bundled `sample_data` history is intentionally short, so use a short
+walk-forward window for the offline example.
 
-### Core metrics
+```bash
+monte-carlo backtest AAPL \
+  --source offline \
+  --data-path sample_data \
+  --lookback 5 \
+  --hold 3 \
+  --rebalance 3 \
+  --top 1 \
+  --scenarios 10
+```
 
-- strategy total return
-- strategy annualized return
-- strategy max drawdown
-- win rate by rebalance period
-- average turnover
-- transaction cost drag
-- excess return vs equal-weight benchmark
+### What it prints
+
+- strategy return
+- annualized return
+- max drawdown
+- excess return vs equal weight
 - excess return vs cash
 
-## Offline data
+Add `--details` for the full metric table.
 
-Offline mode expects CSV files with `Date` and `Close` columns.
+### How to read the result
 
-By default the project looks for:
+- `Strategy return` is the outcome of the full rebalance process.
+- `Annualized return` lets you compare runs with different window lengths.
+- `Max drawdown` is the deepest peak-to-trough loss; smaller is easier to hold.
+- `vs equal weight` asks whether the process beat a simple own-everything baseline.
+- `vs cash` asks whether taking market risk paid for itself.
+- Saved backtest folders also include `price_sources.json` so the origin of the prices survives the run.
+
+## Data Sources
+
+Use `--source` to pick how prices are loaded:
+
+- `auto` tries live downloads first, then local CSV files
+- `offline` uses local CSV files only
+- `online` uses live downloads only
+
+Run results tell you which source actually supplied the prices, so `auto`
+stays honest when it falls back.
+
+Local CSVs should include `Date` and `Close` columns. By default the repo looks in:
 
 ```text
 sample_data/<TICKER>.csv
 ```
 
-You can also point both CLIs at a custom directory:
+The bundled `sample_data` directory includes `AAPL.csv` and `MSFT.csv` so the
+offline path stays deterministic out of the box.
+
+Use `--data-path` to point at a custom directory or a single CSV file.
+
+## Saved outputs
+
+Use `--output` when the result needs to survive the terminal. The quickest
+walkthrough of every saved artifact lives in
+[docs/output-guide.md](docs/output-guide.md).
+
+## Browser UI
+
+The web UI keeps the happy path tiny:
+
+- choose `Simulate` or `Backtest`
+- enter one or more tickers
+- pick `Demo sample`, `Try live data`, or `Local CSV`
+
+`Demo sample` opens instantly and stays deterministic. `Try live data` starts
+online and falls back to local CSVs. `Local CSV` accepts a single file or a
+directory of `<TICKER>.csv` files with `Date` and `Close` columns.
+
+For headless CLI environments:
 
 ```bash
---offline-path /path/to/csvs
+export MPLBACKEND=Agg
 ```
 
-## Architecture
+## Migration Note
 
-- `simulation.py` — historical bootstrap, GBM, prediction-market simulation
-- `analysis.py` — pure path/statistical summaries
-- `decision.py` — ranking, guardrails, allocation, execution sizing
-- `backtest.py` — walk-forward validation engine
-- `viz.py` — path, distribution, and equity-curve plots
-- `data.py` — Yahoo Finance fetch plus offline CSV fallback
-- `cli.py` — forward simulation entrypoint
+Legacy script entrypoints still work during migration, but each one now has one
+obvious replacement:
 
-## Advanced features
-
-These are secondary. They exist, but they are not the product center:
-
-- optional OpenAI-written narrative summaries
-- prediction-market probability simulation
-- policy-file driven guardrails
-- tamper-evident decision journals
-- stress overlays via shock events
+- `python cli.py ...` -> `monte-carlo simulate ...`
+- `python backtest.py ...` -> `monte-carlo backtest ...`
+- `python MonteCarlo.py --ticker AAPL` -> `monte-carlo simulate AAPL --show`
 
 ## Testing
-
-Run the test suite with:
 
 ```bash
 uv run --with pytest pytest -q
 ```
 
-Prefer targeted runs while iterating, for example:
+Targeted examples:
 
 ```bash
-uv run --with pytest pytest tests/test_backtest.py -q
 uv run --with pytest pytest tests/test_cli.py -q
+uv run --with pytest pytest tests/test_backtest.py -q
 ```
 
 ## License

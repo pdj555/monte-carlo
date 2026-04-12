@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "monte-carlo-sim"
 version = "0.1.0"
-description = "Monte Carlo stock price simulations (CLI + reusable modules)."
+description = "Monte Carlo decision engine for simulation, backtesting, and a lean browser UI."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
@@ -20,9 +20,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["flake8", "pytest"]
+ui = ["Flask"]
 
 [project.scripts]
-monte-carlo = "cli:main"
+monte-carlo = "public_cli:main"
+monte-carlo-ui = "app:main"
 
 [tool.setuptools]
-py-modules = ["analysis", "ai", "backtest", "cli", "data", "decision", "simulation", "viz"]
+py-modules = ["analysis", "ai", "app", "backtest", "cli", "cli_shared", "data", "decision", "legacy_cli", "public_cli", "simulate_cli", "simulation", "viz"]
