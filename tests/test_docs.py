@@ -55,6 +55,7 @@ def test_readme_explains_how_to_read_results_and_saved_backtest_outputs() -> Non
     assert text.count("### How to read the result") == 2
     assert "`Data source` tells you whether the run used live prices" in text
     assert "`price_sources.json`" in text
+    assert "`Stance` is the posture: lean in, selective, defensive, or stand aside." in text
 
 
 def test_readme_links_output_guide_and_stays_operator_focused() -> None:
@@ -81,6 +82,8 @@ def test_output_guide_names_key_saved_artifacts() -> None:
         "price_sources.json",
     ):
         assert artifact in text
+    assert "execution_plan.csv" not in text
+    assert "simulations.csv.gz" not in text
 
 
 def test_readme_offline_examples_run(capsys) -> None:

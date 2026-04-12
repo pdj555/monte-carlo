@@ -83,8 +83,8 @@ def build_public_parser() -> argparse.ArgumentParser:
         choices=("auto", "offline", "online"),
         default="auto",
         help=(
-            "Price source. auto tries live first, offline uses local CSVs only, "
-            "online uses live data only."
+            "Price source. auto tries live first, then falls back to local CSVs; "
+            "offline uses local CSVs only, online uses live data only."
         ),
     )
     simulate_parser.add_argument(
@@ -171,8 +171,8 @@ def build_public_parser() -> argparse.ArgumentParser:
         choices=("auto", "offline", "online"),
         default="auto",
         help=(
-            "Price source. auto tries live first, offline uses local CSVs only, "
-            "online uses live data only."
+            "Price source. auto tries live first, then falls back to local CSVs; "
+            "offline uses local CSVs only, online uses live data only."
         ),
     )
     backtest_parser.add_argument(

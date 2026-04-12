@@ -78,7 +78,7 @@ Add `--details` when you want tables and secondary metrics.
 
 ### How to read the result
 
-- `Stance` is the posture: lean in, stay selective, or wait.
+- `Stance` is the posture: lean in, selective, defensive, or stand aside.
 - `Data source` tells you whether the run used live prices, local CSVs, or a fallback.
 - `Top idea` is the first name to inspect; the suggested weight is a sizing hint, not an order.
 - `Avoid` and `Cash buffer` are guardrails. Treat them as a signal to pass or keep more capital idle.

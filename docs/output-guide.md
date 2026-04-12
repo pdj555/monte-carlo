@@ -31,11 +31,6 @@ Open these first:
 - `*_distribution.png` and `*_paths.png` are the fastest visual check for shape,
   spread, and downside.
 
-You may also see extra files in deprecated expert flows:
-
-- `execution_plan.csv` when a capital-sized execution plan is requested.
-- `simulations.csv.gz` when raw simulated paths are explicitly saved.
-
 ## Backtest
 
 Example folder:

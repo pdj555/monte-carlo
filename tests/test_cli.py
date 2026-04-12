@@ -68,10 +68,11 @@ def test_public_help_explains_auto_source(argv, capsys):
         parse_public_args(argv)
 
     captured = capsys.readouterr()
-    assert "auto tries live first" in captured.out
-    assert "local fallback for auto" in captured.out
-    assert "<TICKER>.csv" in captured.out
-    assert "Date and Close columns" in captured.out
+    normalized = " ".join(captured.out.split())
+    assert "auto tries live first, then falls back to local CSVs" in normalized
+    assert "local fallback for auto" in normalized
+    assert "<TICKER>.csv" in normalized
+    assert "Date and Close columns" in normalized
 
 
 def test_public_simulate_with_bundled_sample_data_ranks_distinct_profiles(capsys):
