@@ -110,7 +110,7 @@ def test_flask_app_renders_default_demo() -> None:
 
     assert response.status_code == 200
     assert "Simulate current ideas or backtest history." in body
-    assert "Live first" in body
+    assert "Try live data" in body
     assert "Terminal output" in body
     assert web_app.SOURCE_NOTES["auto"] in body
     assert "data:image/png;base64," in body

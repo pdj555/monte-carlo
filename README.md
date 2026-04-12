@@ -155,15 +155,21 @@ offline path stays deterministic out of the box.
 
 Use `--data-path` to point at a custom directory or a single CSV file.
 
+## Saved outputs
+
+Use `--output` when the result needs to survive the terminal. The quickest
+walkthrough of every saved artifact lives in
+[docs/output-guide.md](docs/output-guide.md).
+
 ## Browser UI
 
 The web UI keeps the happy path tiny:
 
 - choose `Simulate` or `Backtest`
 - enter one or more tickers
-- pick `Demo sample`, `Live first`, or `Local CSV`
+- pick `Demo sample`, `Try live data`, or `Local CSV`
 
-`Demo sample` opens instantly and stays deterministic. `Live first` starts
+`Demo sample` opens instantly and stays deterministic. `Try live data` starts
 online and falls back to local CSVs. `Local CSV` accepts a single file or a
 directory of `<TICKER>.csv` files with `Date` and `Close` columns.
 
@@ -175,22 +181,12 @@ export MPLBACKEND=Agg
 
 ## Migration Note
 
-Legacy script entrypoints remain available as deprecated compatibility wrappers.
+Legacy script entrypoints still work during migration, but each one now has one
+obvious replacement:
 
-## Architecture
-
-- `app.py` - lean Flask UI for the browser surface and local `monte-carlo-ui` entrypoint
-- `legacy_cli.py` - full deprecated simulation parser and runner behind the thin `cli.py` facade
-- `public_cli.py` - public `monte-carlo simulate|backtest` parser and runners
-- `simulate_cli.py` - shared simulation workflow used by public and legacy entrypoints
-- `cli_shared.py` - shared parser and rendering helpers for CLI surfaces
-- `cli.py` - thin deprecated simulation compatibility facade
-- `backtest.py` - walk-forward engine plus legacy wrapper
-- `simulation.py` - vectorized simulation engines
-- `analysis.py` - summary statistics
-- `decision.py` - ranking, guardrails, and allocation rules
-- `data.py` - Yahoo Finance fetch plus offline CSV fallback
-- `viz.py` - distribution, path, and equity-curve plots
+- `python cli.py ...` -> `monte-carlo simulate ...`
+- `python backtest.py ...` -> `monte-carlo backtest ...`
+- `python MonteCarlo.py --ticker AAPL` -> `monte-carlo simulate AAPL --show`
 
 ## Testing
 

@@ -51,7 +51,7 @@ CHOICES = {
 }
 SOURCE_NOTES = {
     "demo": "Starts with the bundled sample so the first decision is immediate.",
-    "auto": "Starts with live prices, then falls back to local CSVs.",
+    "auto": "Tries live prices, then falls back to local CSVs.",
     "local": (
         "Use one CSV, or a folder of <TICKER>.csv files, "
         "each with Date and Close columns."
@@ -1072,7 +1072,7 @@ if app is not None:
             job_options=(("simulate", "Simulate"), ("backtest", "Backtest")),
             source_options=(
                 ("demo", "Demo sample"),
-                ("auto", "Live first"),
+                ("auto", "Try live data"),
                 ("local", "Local CSV"),
             ),
             source_notes=SOURCE_NOTES,

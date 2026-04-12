@@ -21,11 +21,12 @@ follow-on would be keeping docs, install smoke tests, and browser checks aligned
 with those fixtures whenever the sample data changes so the deterministic path
 stays trustworthy.
 
-### 2. Add one saved-output walkthrough
+### 2. Keep the browser UI modular
 
-The README now explains how to read the terminal summaries. A short follow-on
-doc with one example `results/` directory and a plain-language explanation of
-each saved file would make artifact handoff easier after a run finishes.
+The current browser UI is still easy to use, but `app.py` now owns CSS, HTML,
+request parsing, and page-state builders in one file. The next UI feature
+should be the trigger to split rendering and state helpers so the happy path
+stays easy to change.
 
 ### 3. Extend provenance checks when new artefacts appear
 
