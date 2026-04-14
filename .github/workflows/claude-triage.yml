@@ -1,0 +1,36 @@
+name: Claude Issue Triage
+
+on:
+  issues:
+    types: [opened, reopened]
+
+concurrency:
+  group: claude-triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude for profit-focused triage
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Triage must run for issues opened by external reporters too —
+          # that is the whole point of the workflow.
+          allowed_non_write_users: "*"
+          prompt: "/profit-triage REPO: ${{ github.repository }} ISSUE_NUMBER: ${{ github.event.issue.number }}"
+          claude_args: |
+            --model claude-haiku-4-5
+            --max-turns 4
+            --allowedTools "Read,Grep,Glob,Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Bash(gh issue close:*),Bash(scripts/edit-issue-labels.sh:*)"
