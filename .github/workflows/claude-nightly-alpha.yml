@@ -1,0 +1,41 @@
+name: Claude Nightly Alpha Hunter
+
+on:
+  schedule:
+    # 06:00 UTC, Monday-Friday. Pre-market on the US east coast.
+    - cron: "0 6 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      focus:
+        description: "Optional focus area (e.g. simulation, backtest, risk)"
+        required: false
+        default: ""
+
+concurrency:
+  group: claude-nightly-alpha
+  cancel-in-progress: true
+
+jobs:
+  hunt-alpha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude alpha hunter
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          track_progress: true
+          prompt: "/hunt-alpha REPO: ${{ github.repository }} FOCUS: ${{ github.event.inputs.focus || 'all' }} RUN_ID: ${{ github.run_id }}"
+          claude_args: |
+            --model claude-opus-4-6
+            --max-turns 20
+            --allowedTools "Edit,Read,Write,Grep,Glob,Bash(git checkout:*),Bash(git switch:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git status),Bash(git diff:*),Bash(git log:*),Bash(python3 -m pip install -e .[dev]),Bash(pytest -q),Bash(pytest -v),Bash(flake8 .),Bash(monte-carlo simulate:*),Bash(monte-carlo backtest:*),Bash(gh pr create:*),Bash(gh pr view:*)"
