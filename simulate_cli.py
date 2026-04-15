@@ -297,11 +297,14 @@ def maybe_show_simulation_plots(args: argparse.Namespace, result: dict[str, Any]
 def run(
     args: argparse.Namespace,
     *,
-    render: bool = True,
+    render: bool = False,
     display_plots: bool = True,
     renderer: Callable[[dict[str, Any], argparse.Namespace], None] | None = None,
 ) -> dict[str, Any]:
     """Execute the simulation workflow and return simulation artefacts."""
+
+    if render and renderer is None:
+        raise ValueError("renderer is required when render=True")
 
     tickers = _normalise_tickers(args.tickers)
     output_dir = Path(args.output).expanduser() if args.output else None
@@ -595,8 +598,6 @@ def run(
     }
 
     if render:
-        if renderer is None:
-            raise ValueError("renderer is required when render=True")
         renderer(result, args)
     if display_plots:
         maybe_show_simulation_plots(args, result)
