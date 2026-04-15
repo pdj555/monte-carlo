@@ -14,6 +14,7 @@ import backtest as backtest_module  # noqa: E402
 import cli as cli_module  # noqa: E402
 import data  # noqa: E402
 import MonteCarlo  # noqa: E402
+import simulate_cli  # noqa: E402
 from cli import legacy_main, parse_args, run  # noqa: E402
 from public_cli import (  # noqa: E402
     main,
@@ -257,6 +258,35 @@ def test_public_simulate_matches_legacy_core_outputs(tmp_path, capsys):
     assert set(public["report"]["rankings"]) == set(legacy["report"]["rankings"])
     assert public["report"]["action_plan"]["stance"] == legacy["report"]["action_plan"]["stance"]
     assert public["report"]["portfolio_summary"] == legacy["report"]["portfolio_summary"]
+
+
+def test_simulate_cli_run_defaults_to_headless_programmatic_mode(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
+
+    args = simulate_cli.build_simulation_args(
+        tickers="AAPL",
+        days=5,
+        scenarios=10,
+        seed=7,
+        offline_path=str(data_dir),
+        offline_only=True,
+        show=False,
+        no_plots=True,
+    )
+
+    result = simulate_cli.run(args)
+
+    assert not result["summaries"].empty
+    assert list(result["summaries"].index) == ["AAPL"]
+
+
+def test_simulate_cli_run_requires_renderer_when_rendering():
+    args = simulate_cli.build_simulation_args()
+
+    with pytest.raises(ValueError, match="renderer is required when render=True"):
+        simulate_cli.run(args, render=True)
 
 
 def test_public_backtest_matches_legacy_summary(tmp_path, capsys):
