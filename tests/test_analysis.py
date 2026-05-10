@@ -4,7 +4,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from analysis import summarize_equal_weight_portfolio, summarize_final_prices
+from analysis import (
+    summarize_equal_weight_portfolio,
+    summarize_final_prices,
+    summarize_weighted_portfolio,
+)
 
 
 def test_summarize_final_prices_reports_key_metrics():
@@ -110,6 +114,41 @@ def test_summarize_equal_weight_portfolio_combines_tickers():
     assert summary["component_count"] == 2.0
     assert summary["mean"] == pytest.approx(1.1)
     assert summary["expected_return"] == pytest.approx(0.1)
+
+
+def test_summarize_weighted_portfolio_keeps_uninvested_cash_stable():
+    sims = pd.DataFrame(
+        {
+            ("AAPL", 0): [100.0, 80.0],
+            ("AAPL", 1): [100.0, 120.0],
+            ("MSFT", 0): [50.0, 50.0],
+            ("MSFT", 1): [50.0, 60.0],
+        }
+    )
+    sims.columns = pd.MultiIndex.from_tuples(sims.columns, names=["ticker", "scenario"])
+
+    summary = summarize_weighted_portfolio(
+        sims,
+        current_prices={"AAPL": 100.0, "MSFT": 50.0},
+        weights={"AAPL": 0.25, "MSFT": 0.25},
+    )
+
+    assert summary["invested_weight"] == pytest.approx(0.5)
+    assert summary["cash_weight"] == pytest.approx(0.5)
+    assert summary["component_count"] == pytest.approx(2.0)
+    assert summary["mean"] == pytest.approx(1.025)
+
+
+def test_summarize_weighted_portfolio_rejects_leverage():
+    sims = pd.DataFrame({("AAPL", 0): [100.0, 101.0]})
+    sims.columns = pd.MultiIndex.from_tuples(sims.columns, names=["ticker", "scenario"])
+
+    with pytest.raises(ValueError, match="cannot sum above 1.0"):
+        summarize_weighted_portfolio(
+            sims,
+            current_prices={"AAPL": 100.0},
+            weights={"AAPL": 1.2},
+        )
 
 
 def test_summarize_equal_weight_portfolio_uses_full_paths_for_drawdown_metrics():

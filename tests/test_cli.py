@@ -418,6 +418,10 @@ def test_cli_runs_multi_ticker(tmp_path):
     assert set(result["report"]["rankings"]) == {"AAPL", "MSFT"}
     assert "max_drawdown_q95" in result["report"]["rankings"]["AAPL"]
     assert result["report"]["allocations"]
+    assert result["report"]["allocation_portfolio_summary"] is not None
+    assert result["report"]["allocation_portfolio_summary"]["invested_weight"] == pytest.approx(
+        sum(item["weight"] for item in result["report"]["allocations"].values())
+    )
     assert result["report"]["action_plan"]["stance"] in {"RISK_ON", "SELECTIVE", "DEFENSIVE"}
     assert (output_dir / "rankings.csv").exists()
     assert (output_dir / "allocations.csv").exists()

@@ -24,9 +24,11 @@ Open these first:
 
 - `action_plan.md` is the shortest human-readable decision.
 - `report.json` is the full machine-readable record, including inputs, rankings,
-  allocations, errors, and `price_sources`.
+  allocations, path-aware allocation portfolio risk, errors, and `price_sources`.
 - `rankings.csv` is the scored list of tickers after the model and guardrails.
-- `allocations.csv` is the suggested weight for the names that survived.
+- `allocations.csv` is the suggested weight for the names that survived. The
+  matching `allocation_portfolio_summary` in `report.json` measures the
+  simulated portfolio after cash buffers and risk-budget scaling.
 - `summaries.csv` and `summaries.json` are the per-ticker simulation stats.
 - `*_distribution.png` and `*_paths.png` are the fastest visual check for shape,
   spread, and downside.

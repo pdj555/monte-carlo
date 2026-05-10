@@ -15,7 +15,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from ai import OpenAIConfigurationError, OpenAIRequestError, generate_ai_summary
-from analysis import summarize_equal_weight_portfolio, summarize_final_prices
+from analysis import (
+    summarize_equal_weight_portfolio,
+    summarize_final_prices,
+    summarize_weighted_portfolio,
+)
 from data import PriceDataError, fetch_prices, get_price_source
 from decision import (
     apply_risk_guards,
@@ -478,7 +482,29 @@ def run(
         else rankings
     )
     allocations = recommend_allocations(rankings) if not rankings.empty else pd.DataFrame()
-    if not allocations.empty:
+    allocation_portfolio_summary: pd.Series | None = None
+    if not allocations.empty and not combined.empty:
+        allocation_portfolio_summary = summarize_weighted_portfolio(
+            combined,
+            current_prices=current_prices,
+            weights=allocations["weight"],
+            benchmark_return_pct=benchmark_return_pct,
+        )
+        allocations = enforce_portfolio_risk_budget(
+            allocations,
+            rankings,
+            max_portfolio_var_95_pct=float(args.portfolio_risk_budget_pct),
+            portfolio_var_95_pct=float(
+                allocation_portfolio_summary.get("value_at_risk_95_pct", 0.0)
+            ),
+        )
+        allocation_portfolio_summary = summarize_weighted_portfolio(
+            combined,
+            current_prices=current_prices,
+            weights=allocations["weight"],
+            benchmark_return_pct=benchmark_return_pct,
+        )
+    elif not allocations.empty:
         allocations = enforce_portfolio_risk_budget(
             allocations,
             rankings,
@@ -516,6 +542,11 @@ def run(
         },
         "portfolio_summary": (
             portfolio_summary.to_dict() if portfolio_summary is not None else None
+        ),
+        "allocation_portfolio_summary": (
+            allocation_portfolio_summary.to_dict()
+            if allocation_portfolio_summary is not None
+            else None
         ),
         "rankings": rankings.to_dict(orient="index") if not rankings.empty else {},
         "allocations": allocations.to_dict(orient="index") if not allocations.empty else {},

@@ -296,6 +296,29 @@ def test_enforce_portfolio_risk_budget_scales_weights_when_budget_exceeded():
     assert constrained["weight"].sum() < allocations["weight"].sum()
 
 
+def test_enforce_portfolio_risk_budget_uses_path_aware_var_when_supplied():
+    rankings = pd.DataFrame(
+        {
+            "value_at_risk_95_pct": {"AAPL": 0.05, "MSFT": 0.05},
+        }
+    )
+    allocations = pd.DataFrame(
+        {
+            "weight": {"AAPL": 0.5, "MSFT": 0.5},
+        }
+    )
+
+    constrained = enforce_portfolio_risk_budget(
+        allocations,
+        rankings,
+        max_portfolio_var_95_pct=0.08,
+        portfolio_var_95_pct=0.10,
+    )
+
+    assert constrained["weight"].sum() == pytest.approx(0.8)
+    assert constrained.loc["AAPL", "weight"] == pytest.approx(0.4)
+
+
 def test_enforce_portfolio_risk_budget_keeps_weights_when_under_budget():
     rankings = pd.DataFrame(
         {

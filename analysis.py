@@ -147,14 +147,21 @@ def summarize_final_prices(
     return pd.Series(summary)
 
 
-def summarize_equal_weight_portfolio(
+def summarize_weighted_portfolio(
     simulations: pd.DataFrame,
     *,
     current_prices: Mapping[str, float],
+    weights: Mapping[str, float] | pd.Series,
     quantiles: Sequence[float] | None = None,
     benchmark_return_pct: float | None = None,
 ) -> pd.Series:
-    """Return summary statistics for an equal-weight portfolio."""
+    """Return path-aware summary statistics for a weighted portfolio.
+
+    The portfolio starts at ``1.0``. Supplied weights are invested weights; any
+    unused capital stays in cash at ``1.0`` for the simulated horizon. Scenario
+    columns are matched by scenario id across tickers, preserving the simulated
+    cross-name outcomes instead of adding standalone VaR numbers together.
+    """
 
     if simulations.empty:
         raise ValueError("simulations must contain scenario paths")
@@ -177,13 +184,21 @@ def summarize_equal_weight_portfolio(
     if (initial_prices <= 0).any():
         raise ValueError("all current prices must be positive")
 
-    weights = pd.Series(1.0 / len(tickers), index=tickers, dtype=float)
+    weight_series = pd.Series(weights, dtype=float).reindex(tickers).fillna(0.0)
+    if (weight_series < 0).any():
+        raise ValueError("portfolio weights must be non-negative")
+    if float(weight_series.sum()) > 1.0 + 1e-9:
+        raise ValueError("portfolio weights cannot sum above 1.0")
+
+    cash_weight = max(0.0, 1.0 - float(weight_series.sum()))
     scenarios = simulations.columns.get_level_values("scenario").unique()
     portfolio_columns: dict[object, pd.Series] = {}
     for scenario in scenarios:
         scenario_frame = simulations.xs(scenario, axis=1, level="scenario")
         normalized = scenario_frame.div(initial_prices, axis="columns")
-        portfolio_columns[scenario] = normalized.mul(weights, axis="columns").sum(axis=1)
+        portfolio_columns[scenario] = (
+            normalized.mul(weight_series, axis="columns").sum(axis=1) + cash_weight
+        )
 
     portfolio_paths = pd.DataFrame(portfolio_columns, index=simulations.index)
     portfolio_paths.columns.name = "scenario"
@@ -193,11 +208,42 @@ def summarize_equal_weight_portfolio(
         quantiles=quantiles,
         benchmark_return_pct=benchmark_return_pct,
     )
-    summary["component_count"] = float(len(tickers))
+    summary["component_count"] = float((weight_series > 0).sum())
+    summary["invested_weight"] = float(weight_series.sum())
+    summary["cash_weight"] = float(cash_weight)
     return summary
+
+
+def summarize_equal_weight_portfolio(
+    simulations: pd.DataFrame,
+    *,
+    current_prices: Mapping[str, float],
+    quantiles: Sequence[float] | None = None,
+    benchmark_return_pct: float | None = None,
+) -> pd.Series:
+    """Return summary statistics for an equal-weight portfolio."""
+
+    if simulations.empty:
+        raise ValueError("simulations must contain scenario paths")
+    if not isinstance(simulations.columns, pd.MultiIndex):
+        raise ValueError("simulations must use a ticker/scenario MultiIndex")
+
+    tickers = list(simulations.columns.get_level_values("ticker").unique())
+    if not tickers:
+        raise ValueError("simulations must include at least one ticker")
+
+    weights = pd.Series(1.0 / len(tickers), index=tickers, dtype=float)
+    return summarize_weighted_portfolio(
+        simulations,
+        current_prices=current_prices,
+        weights=weights,
+        quantiles=quantiles,
+        benchmark_return_pct=benchmark_return_pct,
+    )
 
 
 __all__ = [
     "summarize_final_prices",
     "summarize_equal_weight_portfolio",
+    "summarize_weighted_portfolio",
 ]
