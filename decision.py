@@ -148,13 +148,22 @@ def enforce_portfolio_risk_budget(
     rankings: pd.DataFrame,
     *,
     max_portfolio_var_95_pct: float,
+    portfolio_var_95_pct: float | None = None,
 ) -> pd.DataFrame:
-    """Scale allocations so blended 95% VaR stays within a hard budget."""
+    """Scale allocations so portfolio 95% VaR stays within a hard budget.
+
+    When ``portfolio_var_95_pct`` is supplied, the guard uses path-aware
+    simulated portfolio VaR without allowing it to understate the conservative
+    standalone ticker VaR blend. Otherwise it falls back to the standalone
+    blend. Scaling is linear because the excess exposure is moved to cash.
+    """
 
     if allocations.empty:
         return allocations.copy()
     if max_portfolio_var_95_pct < 0:
         raise ValueError("max_portfolio_var_95_pct must be non-negative")
+    if portfolio_var_95_pct is not None and portfolio_var_95_pct < 0:
+        raise ValueError("portfolio_var_95_pct must be non-negative when provided")
     if "weight" not in allocations.columns:
         raise ValueError("allocations missing required columns: weight")
     if "value_at_risk_95_pct" not in rankings.columns:
@@ -163,10 +172,15 @@ def enforce_portfolio_risk_budget(
     scoped = allocations.copy()
     scoped_var = rankings.reindex(scoped.index)["value_at_risk_95_pct"].fillna(0.0)
     blended_var = float((scoped["weight"] * scoped_var).sum())
-    if blended_var <= max_portfolio_var_95_pct or blended_var <= 0.0:
+    if portfolio_var_95_pct is None:
+        budget_var = blended_var
+    else:
+        budget_var = max(float(portfolio_var_95_pct), blended_var)
+
+    if budget_var <= max_portfolio_var_95_pct or budget_var <= 0.0:
         return scoped
 
-    scale = max_portfolio_var_95_pct / blended_var
+    scale = max_portfolio_var_95_pct / budget_var
     scoped["weight"] = scoped["weight"] * scale
     return scoped
 
