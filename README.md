@@ -161,6 +161,22 @@ Use `--output` when the result needs to survive the terminal. The quickest
 walkthrough of every saved artifact lives in
 [docs/output-guide.md](docs/output-guide.md).
 
+## Deploy to Vercel
+
+The browser UI is ready for Vercel: `app.py` exports the Flask `app`,
+`requirements.txt` includes the UI runtime dependency, `.python-version` pins
+Python 3.12, and `vercel.json` keeps the function bundle focused while preserving
+the bundled sample data.
+
+```bash
+python3 -m pip install -r requirements-ui.txt
+vercel dev
+vercel deploy --prod
+```
+
+See [docs/deploy.md](docs/deploy.md) for deployment notes and serverless
+operational limits.
+
 ## Browser UI
 
 The web UI keeps the happy path tiny:
