@@ -15,6 +15,7 @@ from typing import Any
 import pandas as pd
 
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+DEFAULT_OPENAI_MODEL = "gpt-5.2"
 
 
 class OpenAIConfigurationError(RuntimeError):
@@ -65,6 +66,65 @@ def _post_json(
     return parsed
 
 
+def _extract_responses_text(response: dict[str, Any]) -> str:
+    """Extract assistant text from a Responses API payload."""
+
+    output_text = response.get("output_text")
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text.strip()
+
+    fragments: list[str] = []
+    output = response.get("output")
+    if isinstance(output, list):
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content")
+            if not isinstance(content, list):
+                continue
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                text = part.get("text")
+                if isinstance(text, str) and text.strip():
+                    fragments.append(text.strip())
+
+    text = "\n".join(fragments).strip()
+    if text:
+        return text
+
+    raise OpenAIRequestError(f"Unexpected OpenAI response format: {response}")
+
+
+def _build_summary_payload(
+    *,
+    ticker: str,
+    summary: pd.Series,
+    simulation_model: str,
+    days: int,
+    scenarios: int,
+) -> dict[str, object]:
+    numeric_summary = {
+        str(key): float(value)
+        for key, value in summary.to_dict().items()
+        if value is not None
+    }
+
+    return {
+        "ticker": ticker,
+        "simulation_model": simulation_model,
+        "horizon_days": days,
+        "scenarios": scenarios,
+        "metrics": numeric_summary,
+        "requested_output": (
+            "Return Markdown with 4-8 short bullets. Include expected return, "
+            "probability above/below current, downside risk (VaR/CVaR), and one "
+            "clear assumptions/limitations bullet. Do not provide personalized "
+            "financial advice."
+        ),
+    }
+
+
 def generate_ai_summary(
     *,
     ticker: str,
@@ -72,65 +132,47 @@ def generate_ai_summary(
     simulation_model: str,
     days: int,
     scenarios: int,
-    model: str = "gpt-4o-mini",
+    model: str | None = None,
     base_url: str | None = None,
     timeout_seconds: float = 30.0,
 ) -> str:
     """Generate a concise narrative summary for a single ticker simulation."""
 
     api_key = _get_openai_api_key()
-    base_url = (base_url or os.getenv("OPENAI_BASE_URL") or DEFAULT_OPENAI_BASE_URL).rstrip("/")
+    base_url = (
+        base_url or os.getenv("OPENAI_BASE_URL") or DEFAULT_OPENAI_BASE_URL
+    ).rstrip("/")
+    model = model or os.getenv("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
 
-    numeric_summary = {
-        str(key): float(value)
-        for key, value in summary.to_dict().items()
-        if value is not None
-    }
-
-    system_prompt = (
-        "You are a quantitative finance assistant. "
-        "Summarize Monte Carlo simulation output in plain English for a technical user. "
-        "Do not give personalized financial advice. "
-        "Focus on risk, uncertainty, and what the metrics imply."
+    instructions = (
+        "You are a quantitative finance assistant. Summarize Monte Carlo "
+        "simulation output in plain English for a technical user. Focus on risk, "
+        "uncertainty, and what the metrics imply. Never present the output as "
+        "personalized financial advice."
     )
-
-    user_prompt = {
-        "ticker": ticker,
-        "simulation_model": simulation_model,
-        "horizon_days": days,
-        "scenarios": scenarios,
-        "metrics": numeric_summary,
-        "requested_output": (
-            "Return Markdown with 4-8 short bullets. "
-            "Include expected return, probability above/below current, "
-            "and downside risk (VaR/CVaR). "
-            "Call out key assumptions/limitations in one bullet."
-        ),
-    }
 
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": json.dumps(user_prompt, indent=2)},
-        ],
-        "temperature": 0.2,
+        "instructions": instructions,
+        "input": json.dumps(
+            _build_summary_payload(
+                ticker=ticker,
+                summary=summary,
+                simulation_model=simulation_model,
+                days=days,
+                scenarios=scenarios,
+            ),
+            indent=2,
+            sort_keys=True,
+        ),
+        "store": False,
     }
 
-    url = f"{base_url}/chat/completions"
     response = _post_json(
-        url=url,
+        url=f"{base_url}/responses",
         payload=payload,
         api_key=api_key,
         timeout_seconds=timeout_seconds,
     )
 
-    try:
-        content = response["choices"][0]["message"]["content"]
-    except Exception as exc:
-        raise OpenAIRequestError(f"Unexpected OpenAI response format: {response}") from exc
-
-    if not isinstance(content, str) or not content.strip():
-        raise OpenAIRequestError("OpenAI returned an empty response.")
-
-    return content.strip()
+    return _extract_responses_text(response)
