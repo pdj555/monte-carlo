@@ -179,6 +179,13 @@ For headless CLI environments:
 export MPLBACKEND=Agg
 ```
 
+## Optional AI summaries
+
+Legacy simulation flags include `--ai-summary` for an OpenAI-generated narrative
+summary. It uses the Responses API by default with `gpt-5.2`; set
+`OPENAI_API_KEY` to enable it and `OPENAI_MODEL` or `--ai-model` to override the
+model for cost, latency, or availability.
+
 ## Migration Note
 
 Legacy script entrypoints still work during migration, but each one now has one
