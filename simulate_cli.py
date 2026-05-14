@@ -69,7 +69,7 @@ SIMULATION_ARG_DEFAULTS: dict[str, object] = {
     "allow_local_fallback": True,
     "show": True,
     "ai_summary": False,
-    "ai_model": "gpt-4o-mini",
+    "ai_model": None,
     "annual_cash_yield": 0.04,
     "min_expected_return": 0.0,
     "min_prob_up": 0.5,

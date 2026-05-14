@@ -22,7 +22,7 @@ def test_generate_ai_summary_requires_api_key(monkeypatch):
         )
 
 
-def test_generate_ai_summary_parses_chat_completions(monkeypatch):
+def test_generate_ai_summary_parses_responses_api(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     captured = {}
@@ -35,13 +35,14 @@ def test_generate_ai_summary_parses_chat_completions(monkeypatch):
             return False
 
         def read(self):
-            payload = {"choices": [{"message": {"content": "Hello"}}]}
+            payload = {"output_text": "Hello"}
             return json.dumps(payload).encode("utf-8")
 
     def _fake_urlopen(request, timeout):
         captured["url"] = request.full_url
         captured["auth"] = request.headers.get("Authorization")
         captured["timeout"] = timeout
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
         return _FakeResponse()
 
     monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
@@ -57,5 +58,8 @@ def test_generate_ai_summary_parses_chat_completions(monkeypatch):
     )
 
     assert text == "Hello"
-    assert captured["url"].endswith("/chat/completions")
+    assert captured["url"].endswith("/responses")
     assert captured["auth"] == "Bearer test-key"
+    assert captured["payload"]["model"] == "gpt-5.2"
+    assert captured["payload"]["store"] is False
+    assert "messages" not in captured["payload"]

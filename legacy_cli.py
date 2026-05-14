@@ -253,8 +253,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--ai-model",
         type=str,
-        default="gpt-4o-mini",
-        help="OpenAI model name used when --ai-summary is enabled.",
+        default=None,
+        help=(
+            "OpenAI model name used when --ai-summary is enabled "
+            "(defaults to OPENAI_MODEL or gpt-5.2)."
+        ),
     )
     parser.add_argument(
         "--annual-cash-yield",
