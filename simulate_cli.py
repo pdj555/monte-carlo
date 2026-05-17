@@ -298,10 +298,17 @@ def run(
     args: argparse.Namespace,
     *,
     render: bool = False,
-    display_plots: bool = True,
+    display_plots: bool = False,
     renderer: Callable[[dict[str, Any], argparse.Namespace], None] | None = None,
 ) -> dict[str, Any]:
-    """Execute the simulation workflow and return simulation artefacts."""
+    """Execute the simulation workflow and return simulation artefacts.
+
+    Plot display is opt-in: ``display_plots`` defaults to ``False`` so that
+    programmatic callers using :func:`build_simulation_args` defaults
+    (which set ``show=True``) do not unexpectedly open or block on GUI plot
+    windows. CLI entry points pass ``display_plots=True`` explicitly when an
+    interactive session is desired.
+    """
 
     if render and renderer is None:
         raise ValueError("renderer is required when render=True")
