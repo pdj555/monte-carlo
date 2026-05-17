@@ -131,7 +131,7 @@ def test_healthz_and_css_routes() -> None:
     client = web_app.app.test_client()
 
     health = client.get("/healthz")
-    css = client.get("/app.css")
+    css = client.get("/styles.css")
     favicon = client.get("/favicon.ico")
 
     assert health.status_code == 200
