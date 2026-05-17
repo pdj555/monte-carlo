@@ -1,16 +1,21 @@
 name: CI
 
 on:
-  push:
   pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  cli:
+  test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.12"]
 
     steps:
       - name: Checkout
@@ -22,7 +27,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install CLI dependencies
+      - name: Install base dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.lock.txt
@@ -34,6 +39,9 @@ jobs:
           import importlib.util
           assert importlib.util.find_spec("flask") is None
           PY
+
+      - name: Lint
+        run: flake8 .
 
       - name: Entrypoint smoke test
         env:
@@ -47,34 +55,17 @@ jobs:
           monte-carlo-ui > ui.out 2>&1 || test $? -eq 2
           grep -F "Install \`python3 -m pip install -e .[ui]\`" ui.out
 
-      - name: Lint
-        run: flake8 .
-
       - name: Tests
         env:
           MPLBACKEND: Agg
         run: pytest -q
 
-  ui:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install UI dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.lock.txt
-          python -m pip install -e .[dev,ui]
+      - name: Install UI extras
+        if: matrix.python-version == '3.12'
+        run: python -m pip install -e .[dev,ui]
 
       - name: Browser UI tests
+        if: matrix.python-version == '3.12'
         env:
           MPLBACKEND: Agg
         run: pytest tests/test_web_ui.py -q
