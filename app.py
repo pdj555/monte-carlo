@@ -77,15 +77,20 @@ PAGE_TEMPLATE = """
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Monte Carlo</title>
+    <meta name="color-scheme" content="dark">
+    <meta name="description"
+      content="Monte Carlo — a decision engine for current ideas and historical backtests.">
+    <title>Monte Carlo — Decision engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <main class="shell">
       <header class="masthead">
         <div>
-          <p class="eyebrow">Monte Carlo</p>
-          <h1>Simulate current ideas or backtest history.</h1>
+          <p class="eyebrow">Monte&nbsp;Carlo</p>
+          <h1>Simulate current ideas, or backtest history.</h1>
           <p class="lede">
             Start with the sample. Switch to live prices or your own CSVs when you're ready.
           </p>
@@ -197,9 +202,15 @@ PAGE_TEMPLATE = """
           </section>
         {% endif %}
 
-        {% if state.chart_data_url %}
+        {% if state.chart_svg %}
           <figure class="chart">
-            <img src="{{ state.chart_data_url }}" alt="{{ state.chart_alt }}">
+            <div class="chart-figure" role="img" aria-label="{{ state.chart_alt }}">
+              {{ state.chart_svg|safe }}
+            </div>
+          </figure>
+        {% elif state.chart_data_url %}
+          <figure class="chart">
+            <img class="chart-figure" src="{{ state.chart_data_url }}" alt="{{ state.chart_alt }}">
           </figure>
         {% endif %}
 
@@ -210,6 +221,11 @@ PAGE_TEMPLATE = """
           </details>
         {% endif %}
       </section>
+
+      <footer class="signature">
+        <span>Monte&nbsp;Carlo · decision engine</span>
+        <a href="https://github.com/pdj555/monte-carlo" rel="noopener">source · github</a>
+      </footer>
     </main>
 
     <script>
@@ -262,6 +278,7 @@ class PageState:
     summary: str
     notes: tuple[str, ...] = ()
     metrics: tuple[Metric, ...] = ()
+    chart_svg: str | None = None
     chart_data_url: str | None = None
     chart_alt: str = ""
     details_text: str = ""
@@ -364,9 +381,81 @@ def _format_pct(value: float, *, signed: bool = False) -> str:
     return f"{value:+.1%}" if signed else f"{value:.1%}"
 
 
-def _encode_figure(fig: plt.Figure) -> str:
+# Editorial palette — must stay aligned with public/styles.css.
+_CHART_PAPER = "#f4efe6"
+_CHART_MUTED = "#8d877c"
+_CHART_HAIRLINE = "#2a2724"
+_CHART_GOLD = "#d4a373"
+_CHART_SAGE = "#8fb59a"
+
+
+def _apply_chart_style(fig: plt.Figure) -> None:
+    fig.patch.set_alpha(0.0)
+    for ax in fig.get_axes():
+        ax.set_facecolor("none")
+        for spine_name, spine in ax.spines.items():
+            if spine_name in ("top", "right"):
+                spine.set_visible(False)
+            else:
+                spine.set_color(_CHART_HAIRLINE)
+                spine.set_linewidth(0.8)
+        ax.tick_params(
+            colors=_CHART_MUTED,
+            labelsize=9,
+            length=4,
+            width=0.6,
+        )
+        for label in ax.get_xticklabels() + ax.get_yticklabels():
+            label.set_color(_CHART_MUTED)
+            label.set_fontfamily("monospace")
+        ax.grid(True, which="major", color=_CHART_HAIRLINE, linewidth=0.5, alpha=0.6)
+        ax.set_axisbelow(True)
+        if ax.get_title():
+            ax.set_title(
+                ax.get_title(),
+                color=_CHART_PAPER,
+                fontsize=12,
+                pad=14,
+                loc="left",
+                fontweight="normal",
+            )
+        if ax.get_xlabel():
+            ax.set_xlabel(ax.get_xlabel(), color=_CHART_MUTED, fontsize=10)
+        if ax.get_ylabel():
+            ax.set_ylabel(ax.get_ylabel(), color=_CHART_MUTED, fontsize=10)
+        for line in ax.get_lines():
+            if line.get_color() in {"C0", "#1f77b4", "tab:blue", "blue"}:
+                line.set_color(_CHART_GOLD)
+            line.set_linewidth(max(line.get_linewidth(), 0.9))
+
+
+def _encode_figure_svg(fig: plt.Figure) -> str:
+    _apply_chart_style(fig)
+    buffer = io.StringIO()
+    fig.savefig(
+        buffer,
+        format="svg",
+        bbox_inches="tight",
+        transparent=True,
+        metadata={"Date": None},
+    )
+    plt.close(fig)
+    raw = buffer.getvalue()
+    # Strip XML/doctype prologue so the SVG inlines cleanly inside the page.
+    marker = raw.find("<svg")
+    return raw[marker:] if marker != -1 else raw
+
+
+def _encode_figure_data_url(fig: plt.Figure) -> str:
+    _apply_chart_style(fig)
     buffer = io.BytesIO()
-    fig.savefig(buffer, format="png", bbox_inches="tight")
+    fig.savefig(
+        buffer,
+        format="png",
+        bbox_inches="tight",
+        transparent=True,
+        dpi=180,
+    )
     plt.close(fig)
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
@@ -399,10 +488,10 @@ def _simulate_chart_payload(result: dict[str, object]) -> tuple[str | None, str]
     fig = plot_paths(
         simulations,
         ticker=ticker,
-        title=f"{ticker} simulated paths",
+        title=f"{ticker} · simulated paths",
         max_paths=50,
     )
-    return _encode_figure(fig), f"Simulated price paths for {ticker}"
+    return _encode_figure_svg(fig), f"Simulated price paths for {ticker}"
 
 
 def _backtest_chart_payload(result: dict[str, object]) -> tuple[str | None, str]:
@@ -410,8 +499,8 @@ def _backtest_chart_payload(result: dict[str, object]) -> tuple[str | None, str]
     if not isinstance(equity_curve, pd.DataFrame) or equity_curve.empty:
         return None, ""
 
-    fig = plot_equity_curve(equity_curve, title="Backtest equity curve")
-    return _encode_figure(fig), "Backtest equity curve"
+    fig = plot_equity_curve(equity_curve, title="Backtest · equity curve")
+    return _encode_figure_svg(fig), "Backtest equity curve"
 
 
 def _build_simulation_state(
@@ -474,7 +563,7 @@ def _build_simulation_state(
             ),
         ]
 
-    chart_data_url, chart_alt = _simulate_chart_payload(result)
+    chart_svg, chart_alt = _simulate_chart_payload(result)
     stance = str(action_plan.get("stance", "Decision ready"))
     title = STANCE_LABELS.get(stance, stance.replace("_", " ").title())
     summary = str(action_plan.get("headline", "A fresh read is ready."))
@@ -494,7 +583,7 @@ def _build_simulation_state(
         summary=summary,
         notes=tuple(notes),
         metrics=tuple(metrics),
-        chart_data_url=chart_data_url,
+        chart_svg=chart_svg,
         chart_alt=chart_alt,
         details_text=details_text,
     )
@@ -547,7 +636,7 @@ def _build_backtest_state(
             _format_pct(float(summary["excess_return_vs_equal_weight"]), signed=True),
         ),
     )
-    chart_data_url, chart_alt = _backtest_chart_payload(result)
+    chart_svg, chart_alt = _backtest_chart_payload(result)
     source_note = describe_price_sources(result.get("price_sources")) or SOURCE_NOTES[
         ui_request.source
     ]
@@ -564,7 +653,7 @@ def _build_backtest_state(
         ),
         notes=tuple(notes),
         metrics=metrics,
-        chart_data_url=chart_data_url,
+        chart_svg=chart_svg,
         chart_alt=chart_alt,
         details_text=details_text,
     )
