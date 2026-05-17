@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -50,6 +51,35 @@ def test_public_main_without_subcommand_prints_help_hint(capsys):
 def test_public_parse_args_rejects_unknown_source():
     with pytest.raises(SystemExit):
         parse_public_args(["simulate", "AAPL", "--source", "sideways"])
+
+
+def test_public_simulate_reports_no_valid_results_for_failing_tickers(monkeypatch, caplog):
+    def _fetch(_ticker, *args, **kwargs):
+        raise data.PriceDataError("network unavailable")
+
+    monkeypatch.setattr(simulate_cli, "fetch_prices", _fetch)
+
+    with caplog.at_level(logging.ERROR, logger="public_cli"):
+        exit_code = main(
+            [
+                "simulate",
+                "AAPL",
+                "MSFT",
+                "--source",
+                "online",
+                "--days",
+                "5",
+                "--scenarios",
+                "10",
+            ]
+        )
+
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+
+    assert exit_code == 1
+    assert "No simulations were produced for AAPL, MSFT." in messages
+    assert "AAPL: network unavailable" in messages
+    assert "MSFT: network unavailable" in messages
 
 
 @pytest.mark.parametrize("argv", [["simulate", "--help"], ["backtest", "--help"]])

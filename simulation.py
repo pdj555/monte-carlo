@@ -50,7 +50,9 @@ def estimate_gbm_parameters(returns: pd.Series) -> tuple[float, float]:
 
     values = cleaned.to_numpy(dtype=float)
     if values.size < 2:
-        raise ValueError("returns must contain at least two observations to estimate GBM volatility")
+        raise ValueError(
+            "returns must contain at least two observations to estimate GBM volatility"
+        )
     if not np.isfinite(values).all():
         raise ValueError("returns must contain only finite values")
     if (values <= -1.0).any():
