@@ -14,10 +14,11 @@ def test_vercel_config_targets_flask_app_without_legacy_builds() -> None:
 
     assert config["$schema"] == "https://openapi.vercel.sh/vercel.json"
     assert "builds" not in config
-    assert "app.py" in config["functions"]
-    app_config = config["functions"]["app.py"]
-    assert app_config["includeFiles"] == "sample_data/**"
-    assert "tests/**" in app_config["excludeFiles"]
+    assert "api/*.py" in config["functions"]
+    fn_config = config["functions"]["api/*.py"]
+    assert "sample_data/**" in fn_config["includeFiles"]
+    assert "app.py" in fn_config["includeFiles"]
+    assert "tests/**" in fn_config["excludeFiles"]
 
 
 def test_vercel_runtime_files_include_flask_and_python_version() -> None:

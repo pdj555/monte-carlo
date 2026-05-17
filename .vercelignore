@@ -1,0 +1,15 @@
+.venv/
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.egg-info/
+docs/
+tests/
+output/
+results/
+.agent/
+.github/
+.claude/
+uv.lock
+requirements.lock.txt
+pyproject.toml

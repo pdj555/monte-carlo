@@ -45,8 +45,8 @@ def test_create_page_state_for_default_demo_returns_chart() -> None:
 
     assert state.error is None
     assert state.request.source == "demo"
-    assert state.chart_data_url is not None
-    assert state.chart_data_url.startswith("data:image/png;base64,")
+    assert state.chart_svg is not None
+    assert state.chart_svg.startswith("<svg")
     assert state.title
     assert state.source_note == "Data source: bundled sample data."
 
@@ -69,7 +69,7 @@ def test_create_page_state_live_first_handles_download_shape(monkeypatch) -> Non
     state = web_app.create_page_state(web_app.UIRequest(source="auto"))
 
     assert state.error is None
-    assert state.chart_data_url is not None
+    assert state.chart_svg is not None
     assert "Live prices weren’t available" not in state.summary
     assert state.source_note == "Data source: live download."
 
@@ -84,7 +84,7 @@ def test_create_page_state_local_sample_data_handles_multiple_tickers() -> None:
     )
 
     assert state.error is None
-    assert state.chart_data_url is not None
+    assert state.chart_svg is not None
     assert state.source_note == "Data source: bundled sample data for AAPL, MSFT."
     assert "Summary for AAPL" in state.details_text
     assert "Summary for MSFT" in state.details_text
@@ -109,11 +109,11 @@ def test_flask_app_renders_default_demo() -> None:
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Simulate current ideas or backtest history." in body
+    assert "Simulate" in body and "current ideas" in body and "history" in body
     assert "Try live data" in body
     assert "Terminal output" in body
     assert web_app.SOURCE_NOTES["auto"] in body
-    assert "data:image/png;base64," in body
+    assert "<svg" in body
 
 
 def test_flask_app_surfaces_local_path_guidance() -> None:
