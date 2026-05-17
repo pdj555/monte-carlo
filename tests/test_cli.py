@@ -319,6 +319,30 @@ def test_simulate_cli_run_requires_renderer_when_rendering():
         simulate_cli.run(args, render=True)
 
 
+def test_simulate_cli_run_does_not_display_plots_with_default_args(monkeypatch, tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
+
+    show_calls: list[None] = []
+    monkeypatch.setattr(
+        "simulate_cli.plt.show", lambda *args, **kwargs: show_calls.append(None)
+    )
+
+    args = simulate_cli.build_simulation_args(
+        tickers="AAPL",
+        days=5,
+        scenarios=10,
+        seed=7,
+        offline_path=str(data_dir),
+        offline_only=True,
+    )
+
+    simulate_cli.run(args)
+
+    assert show_calls == []
+
+
 def test_public_backtest_matches_legacy_summary(tmp_path, capsys):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
