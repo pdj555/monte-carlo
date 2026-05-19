@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Monte Carlo stock price simulation toolkit using historical data from Yahoo Finance. The codebase provides vectorized simulation engines for both historical bootstrap and geometric Brownian motion (GBM) models, along with analytics and visualization utilities.
+Monte Carlo decision engine for equities. Two surfaces — vectorized simulation (historical bootstrap and GBM) and walk-forward backtesting — feed a ranking/allocation layer that produces an action plan (stance, top idea, focus list, avoid list, cash buffer). A lean Flask UI wraps the same code paths for the browser and Vercel deployments. Python 3.9+.
 
 ## Development Commands
 
@@ -28,33 +28,32 @@ Key CLI options:
 - `--seed N` for reproducible simulations
 - `--details` for full tables and secondary metrics
 
+### Browser UI
+
+```bash
+python3 -m pip install -e .[ui]   # adds Flask
+monte-carlo-ui                    # serves http://127.0.0.1:8000
+```
+
+The UI starts on the bundled AAPL demo, so first render is deterministic and offline-safe.
+
 ### Testing
 
-Run all tests:
 ```bash
-pytest
-```
-
-Run specific test file:
-```bash
-pytest tests/test_simulation.py
-```
-
-Run tests with verbose output:
-```bash
+pytest                            # full suite (pytest.ini sets testpaths=tests, addopts=-ra)
+pytest tests/test_simulation.py   # single file
+pytest tests/test_cli.py::test_x  # single test
 pytest -v
 ```
 
+Tests must be deterministic: pass explicit `seed` values and prefer the offline CSV path over live network calls. `tests/conftest.py` inserts the repo root on `sys.path`, so top-level modules import without a package prefix.
+
 ### Environment Setup
 
-Install the package and console script:
 ```bash
-python3 -m pip install -e .
-```
-
-For headless environments (no GUI):
-```bash
-export MPLBACKEND=Agg
+python3 -m pip install -e .       # CLI only
+python3 -m pip install -e .[ui]   # adds the browser UI
+export MPLBACKEND=Agg             # headless plotting (no GUI pop-ups)
 ```
 
 ## Architecture
@@ -80,6 +79,15 @@ The codebase is organized into focused modules with clear separation of concerns
 - `summarize_final_prices()` computes statistics on the final row of simulation results
 - Returns mean, median, std, min, max, quantiles (default: 5%, 25%, 75%, 95%)
 - When `current_price` is provided, adds expected_return, prob_above_current, value_at_risk_95
+- Optional knobs surface expected_shortfall_95_pct, max_drawdown_q95, prob_hit_target, prob_breach_max_loss, kelly_fraction, and benchmark-relative metrics — these feed the decision layer's scoring and guardrails
+
+**Decision Layer (`decision.py`):**
+- `rank_tickers()` scores summaries into BUY / WATCH / AVOID using expected return, prob above current, VaR/CVaR, drawdown, and (when present) excess-return and Kelly signals
+- `apply_risk_guards()` flips rows to AVOID and records `guardrail_reasons` when expected return, hit-probability, VaR, drawdown, or breach-probability thresholds fail
+- `recommend_allocations()` converts rankings into weights via a risk-scaled, capped, bisection-balanced allocator
+- `enforce_portfolio_risk_budget()` scales weights linearly to keep portfolio 95% VaR within a hard budget (path-aware when supplied, blend-based otherwise)
+- `build_action_plan()` produces the stance / headline / primary pick / focus / avoid / cash-weight payload the CLI and UI render
+- `build_execution_plan()` translates weights into shares, costs, and cash drift given current prices and capital
 
 **Visualization (`viz.py`):**
 - `plot_distribution()` creates histogram + KDE of final prices
@@ -101,6 +109,23 @@ The codebase is organized into focused modules with clear separation of concerns
 - `backtest.py` - Walk-forward engine plus deprecated wrapper entrypoint
 - `MonteCarlo.py` - Deprecated single-ticker compatibility wrapper
 
+**Browser UI (`app.py`):**
+- Flask app exposing `Simulate` and `Backtest` over the same `simulate_cli.py` / `backtest.py` code paths
+- `app.main()` is the installed `monte-carlo-ui` entrypoint
+- `Demo sample`, `Try live data`, and `Local CSV` modes map onto the `--source` semantics from the CLI
+- Module-level `app` object is what Vercel imports — keep it importable without side effects
+
+**AI Summaries (`ai.py`):**
+- `generate_ai_summary()` hits the OpenAI Responses API (default `gpt-5.2`) when the legacy CLI is run with `--ai-summary`
+- Requires `OPENAI_API_KEY`; honors `OPENAI_BASE_URL`, `OPENAI_MODEL`, and `--ai-model`
+- Raises `OpenAIConfigurationError` / `OpenAIRequestError` — callers degrade gracefully rather than failing the run
+
+**Vercel Deployment (`vercel.json`, `api/index.py`, `public/`):**
+- All routes rewrite to `api/index.py` except `/styles.css` and `/robots.txt`, which are served from `public/` with long s-maxage caching
+- `vercel.json` `includeFiles` enumerates every top-level Python module that must ship in the function bundle — **if you add a new top-level `.py` that the UI/CLI imports, add it both here and to `pyproject.toml` `py-modules`**
+- Function `maxDuration=60s`, `memory=1024MB`. Long simulations belong on small scenario counts in this surface
+- See `docs/deploy.md` for serverless operational limits
+
 ### Data Flow
 
 1. **Fetch** historical prices via `data.fetch_prices()` → returns pd.Series indexed by date
@@ -109,7 +134,10 @@ The codebase is organized into focused modules with clear separation of concerns
    - `simulate_prices(returns, days, scenarios, current_price)` - historical model
    - `simulate_gbm(current_price, mu, sigma, days, scenarios)` - GBM model
 4. **Analyze** with `summarize_final_prices(sims, current_price)`
-5. **Visualize** with `plot_distribution()` and `plot_paths()`
+5. **Decide** by piping summaries through `rank_tickers` → `apply_risk_guards` → `recommend_allocations` → `build_action_plan` (and optionally `build_execution_plan`)
+6. **Visualize** with `plot_distribution()` and `plot_paths()`
+
+Both CLI surfaces and the Flask UI share steps 3–5; the only thing they differ on is presentation (`cli_shared.py` for terminal output, `app.py` for HTML).
 
 ### MultiIndex Convention
 
@@ -125,3 +153,13 @@ Tests use pytest fixtures defined in `tests/conftest.py`:
 - Tests cover simulation edge cases (empty data, invalid parameters)
 - CLI tests verify argument parsing and output structure
 - Mock data used to avoid network dependencies during testing
+- `test_repo_config.py` and `test_installation.py` guard packaging — they'll fail if a new top-level module is missing from `pyproject.toml` or `vercel.json` `includeFiles`
+
+### Packaging Gotcha
+
+The project is a flat layout, not a `src/` package. When you add a new top-level `.py` module that other modules import, update **all three** of:
+1. `pyproject.toml` `[tool.setuptools] py-modules` — so `pip install -e .` ships it
+2. `vercel.json` `functions."api/*.py".includeFiles` — so Vercel deployments include it
+3. `pyproject.toml` `[project.scripts]` if it exposes a new console entrypoint
+
+Forgetting any of these tends to surface as "works locally, breaks on install or deploy".
