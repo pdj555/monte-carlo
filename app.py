@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import io
 import os
 import sys
@@ -53,11 +52,10 @@ CHOICES = {
     "source": ("demo", "auto", "local"),
 }
 SOURCE_NOTES = {
-    "demo": "Starts with the bundled sample so the first decision is immediate.",
-    "auto": "Tries live prices, then falls back to local CSVs.",
+    "demo": "Bundled sample. Fast and offline.",
+    "auto": "Live first. CSV fallback if prices are unavailable.",
     "local": (
-        "Use one CSV, or a folder of <TICKER>.csv files, "
-        "each with Date and Close columns."
+        "Use one CSV, or a folder of <TICKER>.csv files, with Date and Close columns."
     ),
 }
 STANCE_LABELS = {
@@ -88,143 +86,145 @@ PAGE_TEMPLATE = """
   <body>
     <main class="shell">
       <header class="masthead">
-        <div>
-          <p class="eyebrow">Monte&nbsp;Carlo</p>
-          <h1>Simulate current ideas, or backtest history.</h1>
-          <p class="lede">
-            Start with the sample. Switch to live prices or your own CSVs when you're ready.
-          </p>
-        </div>
-        <p class="masthead-note">The sample gives you a first decision in a second.</p>
+        <a class="brand" href="/" aria-label="Monte Carlo home">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>Monte Carlo</span>
+        </a>
       </header>
 
-      <form class="controls" method="post" data-ui-form>
-        <div class="group group-job">
-          <fieldset>
-            <legend>Job</legend>
-            <div class="choice-row">
-              {% for value, label in job_options %}
-                <label class="choice">
-                  <input
-                    type="radio"
-                    name="job"
-                    value="{{ value }}"
-                    {% if state.request.job == value %}checked{% endif %}
-                  >
-                  <span>{{ label }}</span>
-                </label>
-              {% endfor %}
-            </div>
-          </fieldset>
-        </div>
-
-        <label class="group group-tickers">
-          <span>Tickers</span>
-          <input
-            type="text"
-            name="tickers"
-            value="{{ state.request.tickers }}"
-            placeholder="AAPL MSFT"
-          >
-        </label>
-
-        <div class="group group-source">
-          <fieldset>
-            <legend>Source</legend>
-            <div class="choice-row" data-source-picker>
-              {% for value, label in source_options %}
-                <label class="choice">
-                  <input
-                    type="radio"
-                    name="source"
-                    value="{{ value }}"
-                    data-note="{{ source_notes[value] }}"
-                    {% if state.request.source == value %}checked{% endif %}
-                  >
-                  <span>{{ label }}</span>
-                </label>
-              {% endfor %}
-            </div>
-          </fieldset>
-        </div>
-
-        <div class="group group-actions">
-          <span>Run</span>
-          <div class="actions">
-            <button type="submit" data-run-button>Run</button>
+      <section class="workspace">
+        <form class="controls" method="post" data-ui-form>
+          <div class="panel-heading">
+            <p class="eyebrow">Setup</p>
+            <h1>Run</h1>
           </div>
-        </div>
 
-        <p class="source-note" data-source-note>{{ state.source_note }}</p>
+          <div class="group group-job">
+            <fieldset>
+              <legend>Job</legend>
+              <div class="choice-row">
+                {% for value, label in job_options %}
+                  <label class="choice">
+                    <input
+                      type="radio"
+                      name="job"
+                      value="{{ value }}"
+                      {% if state.request.job == value %}checked{% endif %}
+                    >
+                    <span>{{ label }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </fieldset>
+          </div>
 
-        <label
-          class="group group-path"
-          data-local-path
-          {% if state.request.source != "local" %}hidden{% endif %}
-        >
-          <span>CSV file or folder</span>
-          <input
-            type="text"
-            name="data_path"
-            value="{{ state.request.data_path or '' }}"
-            placeholder="/Users/you/data or /Users/you/AAPL.csv"
+          <label class="group group-tickers">
+            <span>Tickers</span>
+            <input
+              type="text"
+              name="tickers"
+              value="{{ state.request.tickers }}"
+              placeholder="AAPL MSFT"
+              autocomplete="off"
+            >
+          </label>
+
+          <div class="group group-source">
+            <fieldset>
+              <legend>Source</legend>
+              <div class="choice-row" data-source-picker>
+                {% for value, label in source_options %}
+                  <label class="choice">
+                    <input
+                      type="radio"
+                      name="source"
+                      value="{{ value }}"
+                      data-note="{{ source_notes[value] }}"
+                      {% if state.request.source == value %}checked{% endif %}
+                    >
+                    <span>{{ label }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </fieldset>
+          </div>
+
+          <p class="source-note" data-source-note>{{ state.source_note }}</p>
+
+          <label
+            class="group group-path"
+            data-local-path
+            {% if state.request.source != "local" %}hidden{% endif %}
           >
-        </label>
-      </form>
+            <span>CSV file or folder</span>
+            <input
+              type="text"
+              name="data_path"
+              value="{{ state.request.data_path or '' }}"
+              placeholder="/Users/you/data or /Users/you/AAPL.csv"
+              autocomplete="off"
+            >
+          </label>
 
-      <section class="result" aria-live="polite">
-        {% if state.error %}
-          <div class="alert">{{ state.error }}</div>
-        {% endif %}
+          <div class="run-strip">
+            <button type="submit" data-run-button>
+              Run {{ "backtest" if state.request.job == "backtest" else "simulation" }}
+            </button>
+          </div>
+        </form>
 
-        <div class="headline">
-          <p class="eyebrow">{{ state.eyebrow }}</p>
-          <h2>{{ state.title }}</h2>
-          <p class="summary">{{ state.summary }}</p>
-        </div>
+        <section class="result" aria-live="polite">
+          {% if state.error %}
+            <div class="alert">{{ state.error }}</div>
+          {% endif %}
 
-        {% if state.notes %}
-          <ul class="notes">
-            {% for note in state.notes %}
-              <li>{{ note }}</li>
-            {% endfor %}
-          </ul>
-        {% endif %}
-
-        {% if state.metrics %}
-          <section class="metrics">
-            {% for metric in state.metrics %}
-              <article class="metric">
-                <div class="metric-label">{{ metric.label }}</div>
-                <div class="metric-value">{{ metric.value }}</div>
-              </article>
-            {% endfor %}
-          </section>
-        {% endif %}
-
-        {% if state.chart_svg %}
-          <figure class="chart">
-            <div class="chart-figure" role="img" aria-label="{{ state.chart_alt }}">
-              {{ state.chart_svg|safe }}
+          <div class="headline">
+            <div class="result-topline">
+              <p class="eyebrow">{{ state.eyebrow }}</p>
             </div>
-          </figure>
-        {% elif state.chart_data_url %}
-          <figure class="chart">
-            <img class="chart-figure" src="{{ state.chart_data_url }}" alt="{{ state.chart_alt }}">
-          </figure>
-        {% endif %}
+            <h2>{{ state.title }}</h2>
+            <p class="summary">{{ state.summary }}</p>
+          </div>
 
-        {% if state.details_text %}
-          <details>
-            <summary>Terminal output</summary>
-            <pre>{{ state.details_text }}</pre>
-          </details>
-        {% endif %}
+          {% if state.metrics %}
+            <section class="metrics" aria-label="Run metrics">
+              {% for metric in state.metrics %}
+                <article class="metric">
+                  <div class="metric-label">{{ metric.label }}</div>
+                  <div class="metric-value">{{ metric.value }}</div>
+                </article>
+              {% endfor %}
+            </section>
+          {% endif %}
+
+          {% if state.chart_svg %}
+            <figure class="chart">
+              <div class="chart-figure" role="img" aria-label="{{ state.chart_alt }}">
+                {{ state.chart_svg|safe }}
+              </div>
+            </figure>
+          {% endif %}
+
+          {% if state.notes %}
+            <ul class="notes">
+              {% for note in state.notes %}
+                <li>{{ note }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+          {% if state.details_text %}
+            <details>
+              <summary>Details</summary>
+              <pre>{{ state.details_text }}</pre>
+            </details>
+          {% endif %}
+        </section>
       </section>
 
       <footer class="signature">
-        <span>Monte&nbsp;Carlo · decision engine</span>
-        <a href="https://github.com/pdj555/monte-carlo" rel="noopener">source · github</a>
+        <span>Monte&nbsp;Carlo decision engine</span>
+        <a href="https://github.com/pdj555/monte-carlo" rel="noopener">Source on GitHub</a>
       </footer>
     </main>
 
@@ -242,13 +242,23 @@ PAGE_TEMPLATE = """
         }
       }
 
-      form.addEventListener("change", syncSource);
+      function syncRunLabel() {
+        const selectedJob = form.querySelector("input[name='job']:checked");
+        const label = selectedJob ? selectedJob.value : "simulate";
+        runButton.textContent = label === "backtest" ? "Run backtest" : "Run simulation";
+      }
+
+      form.addEventListener("change", () => {
+        syncSource();
+        syncRunLabel();
+      });
       form.addEventListener("submit", () => {
-        runButton.textContent = "Running...";
+        runButton.textContent = "Running";
         runButton.disabled = true;
       });
 
       syncSource();
+      syncRunLabel();
     </script>
   </body>
 </html>
@@ -279,7 +289,6 @@ class PageState:
     notes: tuple[str, ...] = ()
     metrics: tuple[Metric, ...] = ()
     chart_svg: str | None = None
-    chart_data_url: str | None = None
     chart_alt: str = ""
     details_text: str = ""
     error: str | None = None
@@ -325,7 +334,7 @@ def request_from_form(form: object) -> UIRequest:
 def validate_request(ui_request: UIRequest) -> str | None:
     if ui_request.source == "local":
         if ui_request.data_path is None:
-            return "Choose a CSV file or folder before running Local CSV."
+            return "Choose a CSV file or folder before running CSV."
         if not Path(ui_request.data_path).expanduser().exists():
             return "That path was not found. Choose a CSV file or folder that exists."
     return None
@@ -444,20 +453,6 @@ def _encode_figure_svg(fig: plt.Figure) -> str:
     # Strip XML/doctype prologue so the SVG inlines cleanly inside the page.
     marker = raw.find("<svg")
     return raw[marker:] if marker != -1 else raw
-
-
-def _encode_figure_data_url(fig: plt.Figure) -> str:
-    _apply_chart_style(fig)
-    buffer = io.BytesIO()
-    fig.savefig(
-        buffer,
-        format="png",
-        bbox_inches="tight",
-        transparent=True,
-        dpi=180,
-    )
-    plt.close(fig)
-    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
 def _simulate_chart_payload(result: dict[str, object]) -> tuple[str | None, str]:
@@ -661,7 +656,7 @@ def _build_backtest_state(
 
 def _friendly_runtime_message(ui_request: UIRequest, raw_message: str) -> str:
     if ui_request.source == "auto":
-        return "Live prices weren’t available. Try again or switch to Demo sample or Local CSV."
+        return "Live prices weren't available. Try again or switch to Sample or CSV."
     return raw_message
 
 
@@ -675,7 +670,7 @@ def _error_state(
         request=ui_request,
         source_note=SOURCE_NOTES[ui_request.source],
         eyebrow="Needs attention",
-        title="Couldn’t finish that run.",
+        title="Couldn't finish that run.",
         summary=summary,
         details_text=details_text or summary,
         error=summary,
@@ -748,9 +743,9 @@ if app is not None:
             PAGE_TEMPLATE,
             job_options=(("simulate", "Simulate"), ("backtest", "Backtest")),
             source_options=(
-                ("demo", "Demo sample"),
-                ("auto", "Try live data"),
-                ("local", "Local CSV"),
+                ("demo", "Sample"),
+                ("auto", "Live"),
+                ("local", "CSV"),
             ),
             source_notes=SOURCE_NOTES,
             state=state,

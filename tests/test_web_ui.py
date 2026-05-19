@@ -109,9 +109,9 @@ def test_flask_app_renders_default_demo() -> None:
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Simulate" in body and "current ideas" in body and "history" in body
-    assert "Try live data" in body
-    assert "Terminal output" in body
+    assert "Simulate" in body
+    assert "Live" in body
+    assert "Details" in body
     assert web_app.SOURCE_NOTES["auto"] in body
     assert "<svg" in body
 
@@ -123,7 +123,7 @@ def test_flask_app_surfaces_local_path_guidance() -> None:
     body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Choose a CSV file or folder before running Local CSV." in body
+    assert "Choose a CSV file or folder before running CSV." in body
     assert "CSV file or folder" in body
 
 
