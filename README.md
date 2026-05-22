@@ -11,6 +11,15 @@ flowchart LR
   D --> F[Return + drawdown]
 ```
 
+The main CLI has two commands:
+
+- `monte-carlo simulate` for current opportunities
+- `monte-carlo backtest` for walk-forward validation
+
+Optional browser entrypoint:
+
+- `monte-carlo-ui` for a lean browser UI
+
 ## Get started
 
 ```bash
@@ -26,28 +35,57 @@ python3 -m pip install -e .[ui]
 monte-carlo-ui   # http://127.0.0.1:8000
 ```
 
-Offline, deterministic run:
+## Workflow: simulate
 
 ```bash
-monte-carlo simulate AAPL --source offline --data-path sample_data
+monte-carlo simulate AAPL MSFT \
+  --source offline \
+  --data-path sample_data
 ```
 
-## Overview
+### How to read the result
 
-| Command | Question it answers |
-| :-- | :-- |
-| `simulate` | What stance fits these names right now? |
-| `backtest` | Did this process hold up on past data? |
+- `Stance` is the posture: lean in, selective, defensive, or stand aside.
+- `Data source` tells you whether the run used live prices, local CSVs, or a fallback.
+- `Top idea` is the first name to inspect; the suggested weight is a sizing hint, not an order.
+- `Avoid` and `Cash buffer` are guardrails. Treat them as a signal to pass or keep more capital idle.
 
-**Simulate** returns a stance (lean in, selective, defensive, stand aside), a top idea, and guardrails when conviction or data quality is weak.
+## Workflow: backtest
 
-**Backtest** returns strategy return, max drawdown, and comparisons to equal weight and cash. Add `--details` for the full metric table. Use `--output DIR` to persist artifacts — see [docs/output-guide.md](docs/output-guide.md).
+The bundled `sample_data` history is intentionally short, so use a short walk-forward window for the offline example.
+
+```bash
+monte-carlo backtest AAPL \
+  --source offline \
+  --data-path sample_data \
+  --lookback 5 \
+  --hold 3 \
+  --rebalance 3 \
+  --top 1 \
+  --scenarios 10
+```
+
+### How to read the result
+
+- `Strategy return` is the outcome of the full rebalance process.
+- `Max drawdown` is the deepest peak-to-trough loss; smaller is easier to hold.
+- `vs equal weight` asks whether the process beat a simple own-everything baseline.
+- `vs cash` asks whether taking market risk paid for itself.
+- Saved backtest folders also include `price_sources.json` so the origin of the prices survives the run.
 
 ## Reference
 
 **Data.** `--source auto | offline | online`. Local CSVs need `Date` and `Close`; defaults live in `sample_data/`.
 
+**Outputs.** Use `--output DIR` to persist artifacts — see [docs/output-guide.md](docs/output-guide.md).
+
 **Deploy.** Browser UI is Vercel-ready. See [docs/deploy.md](docs/deploy.md).
+
+**Migration.**
+
+- `python cli.py ...` -> `monte-carlo simulate ...`
+- `python backtest.py ...` -> `monte-carlo backtest ...`
+- `python MonteCarlo.py --ticker AAPL` -> `monte-carlo simulate AAPL --show`
 
 **Test.**
 
