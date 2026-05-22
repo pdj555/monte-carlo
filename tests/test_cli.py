@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +15,7 @@ import backtest as backtest_module  # noqa: E402
 import cli as cli_module  # noqa: E402
 import data  # noqa: E402
 import MonteCarlo  # noqa: E402
+import simulate_cli  # noqa: E402
 from cli import legacy_main, parse_args, run  # noqa: E402
 from public_cli import (  # noqa: E402
     main,
@@ -49,6 +51,35 @@ def test_public_main_without_subcommand_prints_help_hint(capsys):
 def test_public_parse_args_rejects_unknown_source():
     with pytest.raises(SystemExit):
         parse_public_args(["simulate", "AAPL", "--source", "sideways"])
+
+
+def test_public_simulate_reports_no_valid_results_for_failing_tickers(monkeypatch, caplog):
+    def _fetch(_ticker, *args, **kwargs):
+        raise data.PriceDataError("network unavailable")
+
+    monkeypatch.setattr(simulate_cli, "fetch_prices", _fetch)
+
+    with caplog.at_level(logging.ERROR, logger="public_cli"):
+        exit_code = main(
+            [
+                "simulate",
+                "AAPL",
+                "MSFT",
+                "--source",
+                "online",
+                "--days",
+                "5",
+                "--scenarios",
+                "10",
+            ]
+        )
+
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+
+    assert exit_code == 1
+    assert "No simulations were produced for AAPL, MSFT." in messages
+    assert "AAPL: network unavailable" in messages
+    assert "MSFT: network unavailable" in messages
 
 
 @pytest.mark.parametrize("argv", [["simulate", "--help"], ["backtest", "--help"]])
@@ -257,6 +288,59 @@ def test_public_simulate_matches_legacy_core_outputs(tmp_path, capsys):
     assert set(public["report"]["rankings"]) == set(legacy["report"]["rankings"])
     assert public["report"]["action_plan"]["stance"] == legacy["report"]["action_plan"]["stance"]
     assert public["report"]["portfolio_summary"] == legacy["report"]["portfolio_summary"]
+
+
+def test_simulate_cli_run_defaults_to_headless_programmatic_mode(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
+
+    args = simulate_cli.build_simulation_args(
+        tickers="AAPL",
+        days=5,
+        scenarios=10,
+        seed=7,
+        offline_path=str(data_dir),
+        offline_only=True,
+        show=False,
+        no_plots=True,
+    )
+
+    result = simulate_cli.run(args)
+
+    assert not result["summaries"].empty
+    assert list(result["summaries"].index) == ["AAPL"]
+
+
+def test_simulate_cli_run_requires_renderer_when_rendering():
+    args = simulate_cli.build_simulation_args()
+
+    with pytest.raises(ValueError, match="renderer is required when render=True"):
+        simulate_cli.run(args, render=True)
+
+
+def test_simulate_cli_run_does_not_display_plots_with_default_args(monkeypatch, tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_sample_csv(str(data_dir), "AAPL", trend=0.5)
+
+    show_calls: list[None] = []
+    monkeypatch.setattr(
+        "simulate_cli.plt.show", lambda *args, **kwargs: show_calls.append(None)
+    )
+
+    args = simulate_cli.build_simulation_args(
+        tickers="AAPL",
+        days=5,
+        scenarios=10,
+        seed=7,
+        offline_path=str(data_dir),
+        offline_only=True,
+    )
+
+    simulate_cli.run(args)
+
+    assert show_calls == []
 
 
 def test_public_backtest_matches_legacy_summary(tmp_path, capsys):
