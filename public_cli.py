@@ -12,6 +12,7 @@ from typing import Any, Iterable, Optional
 import pandas as pd
 
 import backtest as backtest_cli
+from data import PriceDataError
 from cli_shared import (
     IntentionalDefaultsHelpFormatter,
     non_negative_int,
@@ -317,6 +318,64 @@ def describe_price_sources(price_sources: object) -> str | None:
     return "Data source: " + "; ".join(parts) + "."
 
 
+def _log_public_error(exc: Exception, *, command: str, args: argparse.Namespace) -> None:
+    """Emit actionable, command-specific errors for terminal operators."""
+
+    if isinstance(exc, PriceDataError):
+        source = str(getattr(args, "source", "auto"))
+        data_path = str(getattr(args, "data_path", "sample_data") or "sample_data")
+        LOGGER.error(
+            "Couldn't complete %s because price data could not be loaded: %s",
+            command,
+            exc,
+        )
+
+        if source == "online":
+            LOGGER.error(
+                "Try `--source auto` for local fallback, or `--source offline --data-path %s` "
+                "for offline/CSV mode.",
+                data_path,
+            )
+        else:
+            LOGGER.error(
+                "Tip: check `--data-path` points to a CSV file or a folder of <TICKER>.csv "
+                "files, or use `--source offline --data-path sample_data` for bundled fixtures.",
+            )
+        return
+
+    if isinstance(exc, ValueError):
+        LOGGER.error("Invalid input for %s: %s", command, exc)
+        LOGGER.error("Use `%s --help` to check valid flags and defaults.", command)
+        return
+
+    LOGGER.error("%s", exc)
+
+
+def _log_no_simulation_output(
+    *,
+    args: argparse.Namespace,
+    result: dict[str, Any],
+) -> None:
+    """Log a clear message when no ticker finished simulation."""
+
+    report = result.get("report", {})
+    errors = report.get("errors", []) if isinstance(report, dict) else []
+    if errors:
+        LOGGER.error(
+            "No simulations were produced for %s.",
+            ", ".join(str(ticker) for ticker in args.tickers),
+        )
+        for item in errors:
+            if not isinstance(item, dict):
+                continue
+            ticker = str(item.get("ticker", "unknown"))
+            message = str(item.get("error", "Unknown error"))
+            LOGGER.error("  %s: %s", ticker, message)
+        return
+
+    LOGGER.error("No simulations were produced. Try loosening filters or check input history.")
+
+
 def _price_source_details(price_sources: object) -> list[str]:
     normalized = _normalize_price_sources(price_sources)
     details: list[str] = []
@@ -512,12 +571,15 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     try:
         if args.command == "simulate":
             result = run_public_simulate(args)
-            return 0 if not result["summaries"].empty else 1
+            if result["summaries"].empty:
+                _log_no_simulation_output(args=args, result=result)
+                return 1
+            return 0
         if args.command == "backtest":
             run_public_backtest(args)
             return 0
     except Exception as exc:
-        LOGGER.error("%s", exc)
+        _log_public_error(exc, command=str(args.command), args=args)
         return 2
 
     return 2

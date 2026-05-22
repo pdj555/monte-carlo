@@ -69,6 +69,11 @@ def test_estimate_gbm_parameters_produces_valid_inputs():
     assert paths.shape == (5, 3)
 
 
+def test_estimate_gbm_parameters_requires_two_observations():
+    with pytest.raises(ValueError, match="at least two observations"):
+        estimate_gbm_parameters(pd.Series([0.01]))
+
+
 def test_simulate_prices_rejects_invalid_dt():
     returns = pd.Series([0.01, -0.02, 0.015])
     with pytest.raises(ValueError):
