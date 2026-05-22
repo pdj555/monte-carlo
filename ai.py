@@ -1,7 +1,7 @@
-"""OpenAI-powered narrative summaries for simulation output.
+"""OpenAI-compatible narrative summaries for simulation output.
 
-This module is optional: it is only used when the CLI is invoked with
-``--ai-summary`` and a valid ``OPENAI_API_KEY`` is available.
+Optional: used when the CLI is invoked with ``--ai-summary`` and
+``OLLAMA_API_KEY`` or ``OPENAI_API_KEY`` is available.
 """
 
 from __future__ import annotations
@@ -16,6 +16,8 @@ import pandas as pd
 
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_OPENAI_MODEL = "gpt-5.2"
+DEFAULT_OLLAMA_BASE_URL = "https://ollama.com/v1"
+DEFAULT_OLLAMA_MODEL = "gpt-oss:120b"
 
 
 class OpenAIConfigurationError(RuntimeError):
@@ -26,13 +28,31 @@ class OpenAIRequestError(RuntimeError):
     """Raised when an OpenAI API request fails."""
 
 
-def _get_openai_api_key() -> str:
-    api_key = os.getenv("OPENAI_API_KEY")
+def _resolve_openai_credentials() -> tuple[str, str, str]:
+    ollama_key = (os.getenv("OLLAMA_API_KEY") or "").strip()
+    openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    api_key = ollama_key or openai_key
     if not api_key:
         raise OpenAIConfigurationError(
-            "OPENAI_API_KEY is required when --ai-summary is enabled."
+            "OLLAMA_API_KEY or OPENAI_API_KEY is required when --ai-summary is enabled."
         )
-    return api_key
+
+    if ollama_key:
+        base_url = (
+            os.getenv("OLLAMA_BASE_URL")
+            or os.getenv("OPENAI_BASE_URL")
+            or DEFAULT_OLLAMA_BASE_URL
+        )
+        model = (
+            os.getenv("OLLAMA_MODEL")
+            or os.getenv("OPENAI_MODEL")
+            or DEFAULT_OLLAMA_MODEL
+        )
+    else:
+        base_url = os.getenv("OPENAI_BASE_URL") or DEFAULT_OPENAI_BASE_URL
+        model = os.getenv("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
+
+    return api_key, base_url.rstrip("/"), model
 
 
 def _post_json(
@@ -138,11 +158,9 @@ def generate_ai_summary(
 ) -> str:
     """Generate a concise narrative summary for a single ticker simulation."""
 
-    api_key = _get_openai_api_key()
-    base_url = (
-        base_url or os.getenv("OPENAI_BASE_URL") or DEFAULT_OPENAI_BASE_URL
-    ).rstrip("/")
-    model = model or os.getenv("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
+    api_key, resolved_base_url, resolved_model = _resolve_openai_credentials()
+    base_url = (base_url or resolved_base_url).rstrip("/")
+    model = model or resolved_model
 
     instructions = (
         "You are a quantitative finance assistant. Summarize Monte Carlo "
