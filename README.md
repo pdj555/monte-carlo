@@ -1,123 +1,58 @@
 # Monte Carlo Decision Engine
 
-Forward simulation and walk-forward backtesting for portfolio decisions. The same core engine powers a CLI, an optional browser UI, and a Vercel-ready deployment surface.
-
-## System overview
+Simulate forward outcomes. Validate the process on history. One engine, CLI and browser.
 
 ```mermaid
-flowchart TB
-  subgraph Inputs
-    T[Tickers]
-    D[Price history<br/>live or CSV]
-    P[Model + scenarios]
-  end
-
-  subgraph Engine
-    S[simulate]
-    B[backtest]
-  end
-
-  subgraph Outputs
-    R[Decision stance]
-    M[Metrics + guardrails]
-    F[Artifacts on disk]
-  end
-
-  T --> S
-  D --> S
-  P --> S
-  T --> B
-  D --> B
-  P --> B
-  S --> R
-  S --> M
-  B --> M
-  M --> F
+flowchart LR
+  A[Prices] --> B[Engine]
+  B --> C[Simulate]
+  B --> D[Backtest]
+  C --> E[Stance + guardrails]
+  D --> F[Return + drawdown]
 ```
 
-## Capabilities
-
-| Mode | Purpose | Primary output |
-| --- | --- | --- |
-| `simulate` | Evaluate current opportunities | Stance, top idea, avoid list, cash buffer |
-| `backtest` | Validate the process historically | Strategy return, drawdown, baseline comparison |
-| `monte-carlo-ui` | Interactive exploration | Same engine through a browser |
-
-## Install
-
-Python 3.9+ required.
+## Get started
 
 ```bash
-python3 -m pip install -e .          # CLI
-python3 -m pip install -e .[ui]      # CLI + browser UI
-```
-
-## Quick start
-
-CLI:
-
-```bash
-monte-carlo simulate AAPL MSFT --days 252 --scenarios 5000 --model gbm --seed 42
-monte-carlo backtest AAPL MSFT --lookback 60 --hold 20 --rebalance 20 --scenarios 1000
+python3 -m pip install -e .
+monte-carlo simulate AAPL MSFT --days 252 --scenarios 5000 --seed 42
+monte-carlo backtest AAPL MSFT --lookback 60 --hold 20 --rebalance 20
 ```
 
 Browser UI:
 
 ```bash
-monte-carlo-ui
-# http://127.0.0.1:8000 — opens with bundled AAPL demo data
+python3 -m pip install -e .[ui]
+monte-carlo-ui   # http://127.0.0.1:8000
 ```
 
-Offline deterministic run:
+Offline, deterministic run:
 
 ```bash
-monte-carlo simulate AAPL MSFT --source offline --data-path sample_data
+monte-carlo simulate AAPL --source offline --data-path sample_data
 ```
 
-## Reading results
+## Overview
 
-**Simulate**
+| Command | Question it answers |
+| :-- | :-- |
+| `simulate` | What stance fits these names right now? |
+| `backtest` | Did this process hold up on past data? |
 
-- **Stance** — portfolio posture: lean in, selective, defensive, or stand aside
-- **Top idea** — first name to inspect; weight is a sizing hint, not an order
-- **Avoid / cash buffer** — guardrails when conviction or data quality is weak
+**Simulate** returns a stance (lean in, selective, defensive, stand aside), a top idea, and guardrails when conviction or data quality is weak.
 
-**Backtest**
+**Backtest** returns strategy return, max drawdown, and comparisons to equal weight and cash. Add `--details` for the full metric table. Use `--output DIR` to persist artifacts — see [docs/output-guide.md](docs/output-guide.md).
 
-- **Strategy return** — outcome of the rebalance process
-- **Max drawdown** — peak-to-trough loss across the window
-- **vs equal weight / vs cash** — benchmarks for process quality
+## Reference
 
-Add `--details` for full metric tables. Use `--output DIR` to persist artifacts; see [docs/output-guide.md](docs/output-guide.md).
+**Data.** `--source auto | offline | online`. Local CSVs need `Date` and `Close`; defaults live in `sample_data/`.
 
-## Data sources
+**Deploy.** Browser UI is Vercel-ready. See [docs/deploy.md](docs/deploy.md).
 
-| `--source` | Behavior |
-| --- | --- |
-| `auto` | Live prices first, local CSV fallback |
-| `offline` | Local CSV only |
-| `online` | Live prices only |
-
-Local CSVs need `Date` and `Close` columns. Defaults: `sample_data/<TICKER>.csv` (bundled `AAPL.csv`, `MSFT.csv`).
-
-## Deployment
-
-The browser UI ships with `vercel.json`, `requirements-ui.txt`, and Python 3.12 pinned in `.python-version`.
-
-```bash
-python3 -m pip install -r requirements-ui.txt
-vercel dev
-vercel deploy --prod
-```
-
-See [docs/deploy.md](docs/deploy.md) for operational limits.
-
-## Testing
+**Test.**
 
 ```bash
 uv run --with pytest pytest -q
 ```
 
-## License
-
-MIT. See [LICENSE](LICENSE).
+MIT · [LICENSE](LICENSE)
