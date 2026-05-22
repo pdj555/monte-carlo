@@ -27,6 +27,13 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Configure AI credentials
+        uses: ./.github/actions/configure-ai
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ollama_api_key: ${{ secrets.OLLAMA_API_KEY }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
       - name: Resolve PR head SHA
         id: pr
         env:
@@ -43,8 +50,17 @@ jobs:
       - name: Claude profit-focused review
         id: review
         uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_AUTH_TOKEN: ${{ env.ANTHROPIC_AUTH_TOKEN }}
+          ANTHROPIC_DEFAULT_SONNET_MODEL: ${{ env.ANTHROPIC_DEFAULT_SONNET_MODEL }}
+          ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ env.ANTHROPIC_DEFAULT_OPUS_MODEL }}
+          OLLAMA_API_KEY: ${{ env.OLLAMA_API_KEY }}
+          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ env.OPENAI_BASE_URL }}
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ env.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ env.ANTHROPIC_API_KEY }}
           track_progress: true
           prompt: "/profit-review REPO: ${{ github.repository }} PR: ${{ inputs.pr_number }} SHA: ${{ steps.pr.outputs.sha }}"
           claude_args: |

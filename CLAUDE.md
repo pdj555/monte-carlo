@@ -116,9 +116,11 @@ The codebase is organized into focused modules with clear separation of concerns
 - Module-level `app` object is what Vercel imports — keep it importable without side effects
 
 **AI Summaries (`ai.py`):**
-- `generate_ai_summary()` hits the OpenAI Responses API (default `gpt-5.2`) when the legacy CLI is run with `--ai-summary`
-- Requires `OPENAI_API_KEY`; honors `OPENAI_BASE_URL`, `OPENAI_MODEL`, and `--ai-model`
+- `generate_ai_summary()` hits an OpenAI-compatible Responses API when the legacy CLI is run with `--ai-summary`
+- Prefers `OLLAMA_API_KEY` + `OLLAMA_BASE_URL` + `OLLAMA_MODEL`; falls back to `OPENAI_*`
 - Raises `OpenAIConfigurationError` / `OpenAIRequestError` — callers degrade gracefully rather than failing the run
+
+**GitHub Actions secrets:** `CLAUDE_CODE_OAUTH_TOKEN` (primary), `OLLAMA_API_KEY` (fallback for `@claude` via Ollama Cloud), `ANTHROPIC_API_KEY` (last resort). Workflows use `.github/actions/configure-ai`.
 
 **Vercel Deployment (`vercel.json`, `api/index.py`, `public/`):**
 - All routes rewrite to `api/index.py` except `/styles.css` and `/robots.txt`, which are served from `public/` with long s-maxage caching
