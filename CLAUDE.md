@@ -120,7 +120,7 @@ The codebase is organized into focused modules with clear separation of concerns
 - Prefers `OLLAMA_API_KEY` + `OLLAMA_BASE_URL` + `OLLAMA_MODEL`; falls back to `OPENAI_*`
 - Raises `OpenAIConfigurationError` / `OpenAIRequestError` — callers degrade gracefully rather than failing the run
 
-**GitHub Actions secrets:** `CLAUDE_CODE_OAUTH_TOKEN` (primary), `OLLAMA_API_KEY` (fallback for `@claude` via Ollama Cloud), `ANTHROPIC_API_KEY` (last resort). Workflows use `.github/actions/configure-ai`.
+**GitHub Actions secrets:** `CLAUDE_CODE_OAUTH_TOKEN` (primary), `OLLAMA_API_KEY` (fallback), `ANTHROPIC_API_KEY` (last resort). Set via GitHub UI or `gh secret set` — never commit, log, or pipe from `.env`. Workflows use `.github/actions/configure-ai` (non-secret config only; secrets pass directly from `${{ secrets.* }}`).
 
 **Vercel Deployment (`vercel.json`, `api/index.py`, `public/`):**
 - All routes rewrite to `api/index.py` except `/styles.css` and `/robots.txt`, which are served from `public/` with long s-maxage caching
