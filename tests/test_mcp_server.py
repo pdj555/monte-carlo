@@ -6,8 +6,6 @@ import json
 from io import StringIO
 from unittest.mock import patch
 
-import pytest
-
 import mcp_server
 
 
@@ -36,7 +34,7 @@ class TestProtocol:
         with patch("sys.stdin", stdin), patch("sys.stdout", stdout):
             mcp_server.serve()
 
-        lines = [l for l in stdout.getvalue().strip().split("\n") if l]
+        lines = [line for line in stdout.getvalue().strip().split("\n") if line]
         assert len(lines) == 2
         tools_response = json.loads(lines[1])
         tool_names = [t["name"] for t in tools_response["result"]["tools"]]
@@ -77,7 +75,6 @@ class TestProtocol:
 class TestToolExecution:
     def test_analyze_ticker_tool(self):
         import pandas as pd
-        from sdk import TickerResult
 
         prices = pd.Series(
             [100.0 + i * 0.1 for i in range(60)],

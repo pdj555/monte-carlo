@@ -20,11 +20,11 @@ import json
 import zlib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Sequence
 
 import pandas as pd
 
-from analysis import summarize_equal_weight_portfolio, summarize_final_prices
+from analysis import summarize_final_prices
 from data import PriceDataError, fetch_prices
 from decision import (
     apply_risk_guards,

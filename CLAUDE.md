@@ -117,8 +117,15 @@ The codebase is organized into focused modules with clear separation of concerns
 - `rebalance_signal()` - Determine whether a portfolio needs rebalancing
 - Each workflow returns a structured, JSON-serialisable dataclass
 
+**Agent SDK Adapters (`agent_integrations.py`):**
+- Optional adapters for OpenAI Agents SDK and Claude Agent SDK
+- OpenAI adapter wraps deterministic workflow tools with `Agent` / `Runner`
+- Claude adapter configures a conservative repo-analysis agent surface
+- Keep these dependencies in the `agents` extra; base CLI/UI installs must stay light
+
 **Command-Line Interfaces:**
 - `monte-carlo` - Public entrypoint with `simulate` and `backtest` subcommands
+- `monte-carlo-mcp` - MCP server entrypoint for agent tool calls
 - `public_cli.py` - Public CLI parser and command runners
   - `build_public_parser()` defines the public argparse structure
   - `run_public_simulate(args)` executes the public simulation surface
@@ -177,7 +184,7 @@ Extract single ticker with: `df.xs("AAPL", axis=1, level=0)`
     "mcpServers": {
         "monte-carlo": {
             "command": "python",
-            "args": ["mcp_server.py"],
+            "args": ["-m", "mcp_server"],
             "cwd": "/path/to/monte-carlo"
         }
     }
@@ -197,6 +204,16 @@ print(result.to_json(indent=2))
 from agent_workflow import opportunity_scan, risk_check
 report = opportunity_scan(["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"])
 risk = risk_check("NVDA", scenarios=2000)
+```
+
+**OpenAI / Claude SDK adapters** (optional):
+```bash
+python3 -m pip install -e .[agents]
+```
+
+```python
+from agent_integrations import build_openai_decision_agent
+agent = build_openai_decision_agent()
 ```
 
 ### Testing Strategy

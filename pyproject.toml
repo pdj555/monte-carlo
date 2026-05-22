@@ -21,10 +21,30 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["flake8", "pytest"]
 ui = ["Flask"]
+agents = ["claude-agent-sdk", "openai-agents"]
 
 [project.scripts]
 monte-carlo = "public_cli:main"
 monte-carlo-ui = "app:main"
+monte-carlo-mcp = "mcp_server:serve"
 
 [tool.setuptools]
-py-modules = ["analysis", "ai", "app", "backtest", "cli", "cli_shared", "data", "decision", "legacy_cli", "public_cli", "simulate_cli", "simulation", "viz"]
+py-modules = [
+  "agent_integrations",
+  "agent_workflow",
+  "analysis",
+  "ai",
+  "app",
+  "backtest",
+  "cli",
+  "cli_shared",
+  "data",
+  "decision",
+  "legacy_cli",
+  "mcp_server",
+  "public_cli",
+  "sdk",
+  "simulate_cli",
+  "simulation",
+  "viz",
+]

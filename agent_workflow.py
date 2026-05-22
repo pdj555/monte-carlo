@@ -19,7 +19,7 @@ import json
 from dataclasses import dataclass, asdict
 from typing import Any, Sequence
 
-from sdk import MonteCarloSDK, TickerResult
+from sdk import MonteCarloSDK
 
 __all__ = [
     "opportunity_scan",

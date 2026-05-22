@@ -135,7 +135,9 @@ def test_pyproject_console_script_points_to_public_cli() -> None:
     text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'monte-carlo = "public_cli:main"' in text
     assert 'monte-carlo-ui = "app:main"' in text
+    assert 'monte-carlo-mcp = "mcp_server:serve"' in text
     assert 'ui = ["Flask"]' in text
+    assert 'agents = ["claude-agent-sdk", "openai-agents"]' in text
 
 
 def test_installed_ui_entrypoint_reports_missing_ui_extra_when_flask_unavailable() -> None:

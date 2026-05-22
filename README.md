@@ -202,6 +202,19 @@ summary. It uses the Responses API by default with `gpt-5.2`; set
 `OPENAI_API_KEY` to enable it and `OPENAI_MODEL` or `--ai-model` to override the
 model for cost, latency, or availability.
 
+## Agent surfaces
+
+The deterministic engine is available to agents without moving calculations into
+the model:
+
+- `sdk.MonteCarloSDK` returns JSON-serializable simulation, portfolio, screen,
+  and comparison results.
+- `monte-carlo-mcp` exposes the same tools over a small MCP server.
+- `agent_workflow.py` provides higher-level scan, risk, what-if, and rebalance
+  workflows.
+- `agent_integrations.py` has optional OpenAI Agents SDK and Claude Agent SDK
+  adapters. Install them with `python3 -m pip install -e .[agents]`.
+
 ## Migration Note
 
 Legacy script entrypoints still work during migration, but each one now has one

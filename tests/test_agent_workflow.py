@@ -7,7 +7,6 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-import agent_workflow
 from agent_workflow import (
     ScanReport,
     RiskReport,
