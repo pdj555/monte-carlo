@@ -37,31 +37,34 @@ def test_improvements_doc_avoids_retired_command_examples() -> None:
 
 def test_readme_offline_backtest_example_uses_sample_data_friendly_window() -> None:
     text = README_PATH.read_text(encoding="utf-8")
-    assert "--source offline" in text
-    assert "--data-path sample_data" in text
-    assert "monte-carlo backtest" in text
+    assert "--lookback 5" in text
+    assert "--hold 3" in text
+    assert "--rebalance 3" in text
+    assert "--top 1" in text
+    assert "--scenarios 10" in text
 
 
 def test_readme_distinguishes_cli_commands_from_browser_entrypoint() -> None:
     text = README_PATH.read_text(encoding="utf-8")
-    assert "| `simulate` |" in text
-    assert "| `backtest` |" in text
-    assert "monte-carlo-ui" in text
+    assert "The main CLI has two commands:" in text
+    assert "Optional browser entrypoint:" in text
 
 
 def test_readme_explains_how_to_read_results_and_saved_backtest_outputs() -> None:
     text = README_PATH.read_text(encoding="utf-8")
-    assert "stance (lean in, selective, defensive, stand aside)" in text
-    assert "strategy return, max drawdown" in text
-    assert "[docs/output-guide.md](docs/output-guide.md)" in text
+    assert text.count("### How to read the result") == 2
+    assert "`Data source` tells you whether the run used live prices" in text
+    assert "`price_sources.json`" in text
+    assert "`Stance` is the posture: lean in, selective, defensive, or stand aside." in text
 
 
 def test_readme_links_output_guide_and_stays_operator_focused() -> None:
     text = README_PATH.read_text(encoding="utf-8")
     assert "[docs/output-guide.md](docs/output-guide.md)" in text
     assert "## Architecture" not in text
-    assert "monte-carlo simulate" in text
-    assert "monte-carlo backtest" in text
+    assert "`python cli.py ...` -> `monte-carlo simulate ...`" in text
+    assert "`python backtest.py ...` -> `monte-carlo backtest ...`" in text
+    assert "`python MonteCarlo.py --ticker AAPL` -> `monte-carlo simulate AAPL --show`" in text
 
 
 def test_output_guide_names_key_saved_artifacts() -> None:
