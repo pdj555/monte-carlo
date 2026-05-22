@@ -1,172 +1,108 @@
 # Monte Carlo Decision Engine
 
-This project does two things:
+Forward simulation and walk-forward backtesting for portfolio decisions. The same core engine powers a CLI, an optional browser UI, and a Vercel-ready deployment surface.
 
-1. simulate forward outcomes for current ideas
-2. backtest the decision process on historical data
+## System overview
 
-The main CLI has two commands:
+```mermaid
+flowchart TB
+  subgraph Inputs
+    T[Tickers]
+    D[Price history<br/>live or CSV]
+    P[Model + scenarios]
+  end
 
-- `monte-carlo simulate` for current opportunities
-- `monte-carlo backtest` for walk-forward validation
+  subgraph Engine
+    S[simulate]
+    B[backtest]
+  end
 
-Optional browser entrypoint:
+  subgraph Outputs
+    R[Decision stance]
+    M[Metrics + guardrails]
+    F[Artifacts on disk]
+  end
 
-- `monte-carlo-ui` for a lean browser UI
+  T --> S
+  D --> S
+  P --> S
+  T --> B
+  D --> B
+  P --> B
+  S --> R
+  S --> M
+  B --> M
+  M --> F
+```
+
+## Capabilities
+
+| Mode | Purpose | Primary output |
+| --- | --- | --- |
+| `simulate` | Evaluate current opportunities | Stance, top idea, avoid list, cash buffer |
+| `backtest` | Validate the process historically | Strategy return, drawdown, baseline comparison |
+| `monte-carlo-ui` | Interactive exploration | Same engine through a browser |
 
 ## Install
 
-Python 3.9+ is required.
-
-CLI install:
+Python 3.9+ required.
 
 ```bash
-python3 -m pip install -e .
+python3 -m pip install -e .          # CLI
+python3 -m pip install -e .[ui]      # CLI + browser UI
 ```
 
-Browser UI install:
+## Quick start
+
+CLI:
 
 ```bash
-python3 -m pip install -e .[ui]
+monte-carlo simulate AAPL MSFT --days 252 --scenarios 5000 --model gbm --seed 42
+monte-carlo backtest AAPL MSFT --lookback 60 --hold 20 --rebalance 20 --scenarios 1000
 ```
 
-Quick start in the browser:
+Browser UI:
 
 ```bash
 monte-carlo-ui
+# http://127.0.0.1:8000 — opens with bundled AAPL demo data
 ```
 
-Then open [http://127.0.0.1:8000](http://127.0.0.1:8000). The app starts with
-the bundled AAPL demo so you land on a real decision instead of an empty page.
-
-Quick start in the CLI:
+Offline deterministic run:
 
 ```bash
-monte-carlo --help
+monte-carlo simulate AAPL MSFT --source offline --data-path sample_data
 ```
 
-## Workflow 1: simulate
+## Reading results
 
-Use `simulate` when you want a decision-first view of one or more tickers.
+**Simulate**
 
-```bash
-monte-carlo simulate AAPL MSFT \
-  --days 252 \
-  --scenarios 5000 \
-  --model gbm \
-  --seed 42 \
-  --output results
-```
+- **Stance** — portfolio posture: lean in, selective, defensive, or stand aside
+- **Top idea** — first name to inspect; weight is a sizing hint, not an order
+- **Avoid / cash buffer** — guardrails when conviction or data quality is weak
 
-### Offline example
+**Backtest**
 
-```bash
-monte-carlo simulate AAPL MSFT \
-  --source offline \
-  --data-path sample_data
-```
+- **Strategy return** — outcome of the rebalance process
+- **Max drawdown** — peak-to-trough loss across the window
+- **vs equal weight / vs cash** — benchmarks for process quality
 
-### What it prints
+Add `--details` for full metric tables. Use `--output DIR` to persist artifacts; see [docs/output-guide.md](docs/output-guide.md).
 
-- stance and headline
-- data source
-- top idea
-- avoid list when guardrails fail
-- cash buffer when conviction is low
+## Data sources
 
-Add `--details` when you want tables and secondary metrics.
+| `--source` | Behavior |
+| --- | --- |
+| `auto` | Live prices first, local CSV fallback |
+| `offline` | Local CSV only |
+| `online` | Live prices only |
 
-### How to read the result
+Local CSVs need `Date` and `Close` columns. Defaults: `sample_data/<TICKER>.csv` (bundled `AAPL.csv`, `MSFT.csv`).
 
-- `Stance` is the posture: lean in, selective, defensive, or stand aside.
-- `Data source` tells you whether the run used live prices, local CSVs, or a fallback.
-- `Top idea` is the first name to inspect; the suggested weight is a sizing hint, not an order.
-- `Avoid` and `Cash buffer` are guardrails. Treat them as a signal to pass or keep more capital idle.
+## Deployment
 
-## Workflow 2: backtest
-
-Use `backtest` when you want to validate the process instead of trusting the forecast.
-
-```bash
-monte-carlo backtest AAPL MSFT \
-  --lookback 60 \
-  --hold 20 \
-  --rebalance 20 \
-  --model gbm \
-  --scenarios 1000 \
-  --seed 42 \
-  --output results/backtest
-```
-
-### Offline example
-
-The bundled `sample_data` history is intentionally short, so use a short
-walk-forward window for the offline example.
-
-```bash
-monte-carlo backtest AAPL \
-  --source offline \
-  --data-path sample_data \
-  --lookback 5 \
-  --hold 3 \
-  --rebalance 3 \
-  --top 1 \
-  --scenarios 10
-```
-
-### What it prints
-
-- strategy return
-- annualized return
-- max drawdown
-- excess return vs equal weight
-- excess return vs cash
-
-Add `--details` for the full metric table.
-
-### How to read the result
-
-- `Strategy return` is the outcome of the full rebalance process.
-- `Annualized return` lets you compare runs with different window lengths.
-- `Max drawdown` is the deepest peak-to-trough loss; smaller is easier to hold.
-- `vs equal weight` asks whether the process beat a simple own-everything baseline.
-- `vs cash` asks whether taking market risk paid for itself.
-- Saved backtest folders also include `price_sources.json` so the origin of the prices survives the run.
-
-## Data Sources
-
-Use `--source` to pick how prices are loaded:
-
-- `auto` tries live downloads first, then local CSV files
-- `offline` uses local CSV files only
-- `online` uses live downloads only
-
-Run results tell you which source actually supplied the prices, so `auto`
-stays honest when it falls back.
-
-Local CSVs should include `Date` and `Close` columns. By default the repo looks in:
-
-```text
-sample_data/<TICKER>.csv
-```
-
-The bundled `sample_data` directory includes `AAPL.csv` and `MSFT.csv` so the
-offline path stays deterministic out of the box.
-
-Use `--data-path` to point at a custom directory or a single CSV file.
-
-## Saved outputs
-
-Use `--output` when the result needs to survive the terminal. The quickest
-walkthrough of every saved artifact lives in
-[docs/output-guide.md](docs/output-guide.md).
-
-## Deploy to Vercel
-
-The browser UI is ready for Vercel: `app.py` exports the Flask `app`,
-`requirements.txt` includes the UI runtime dependency, `.python-version` pins
-Python 3.12, and `vercel.json` keeps the function bundle focused while preserving
-the bundled sample data.
+The browser UI ships with `vercel.json`, `requirements-ui.txt`, and Python 3.12 pinned in `.python-version`.
 
 ```bash
 python3 -m pip install -r requirements-ui.txt
@@ -174,54 +110,12 @@ vercel dev
 vercel deploy --prod
 ```
 
-See [docs/deploy.md](docs/deploy.md) for deployment notes and serverless
-operational limits.
-
-## Browser UI
-
-The web UI keeps the happy path tiny:
-
-- choose `Simulate` or `Backtest`
-- enter one or more tickers
-- pick `Demo sample`, `Try live data`, or `Local CSV`
-
-`Demo sample` opens instantly and stays deterministic. `Try live data` starts
-online and falls back to local CSVs. `Local CSV` accepts a single file or a
-directory of `<TICKER>.csv` files with `Date` and `Close` columns.
-
-For headless CLI environments:
-
-```bash
-export MPLBACKEND=Agg
-```
-
-## Optional AI summaries
-
-Legacy simulation flags include `--ai-summary` for an OpenAI-generated narrative
-summary. It uses the Responses API by default with `gpt-5.2`; set
-`OPENAI_API_KEY` to enable it and `OPENAI_MODEL` or `--ai-model` to override the
-model for cost, latency, or availability.
-
-## Migration Note
-
-Legacy script entrypoints still work during migration, but each one now has one
-obvious replacement:
-
-- `python cli.py ...` -> `monte-carlo simulate ...`
-- `python backtest.py ...` -> `monte-carlo backtest ...`
-- `python MonteCarlo.py --ticker AAPL` -> `monte-carlo simulate AAPL --show`
+See [docs/deploy.md](docs/deploy.md) for operational limits.
 
 ## Testing
 
 ```bash
 uv run --with pytest pytest -q
-```
-
-Targeted examples:
-
-```bash
-uv run --with pytest pytest tests/test_cli.py -q
-uv run --with pytest pytest tests/test_backtest.py -q
 ```
 
 ## License
