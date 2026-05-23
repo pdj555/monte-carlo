@@ -105,7 +105,10 @@ export function Workbench({ initialState }: Props) {
       <header className="topbar">
         <div className="topbar-left">
           <span className="pill">{request.job}</span>
+          <span className="pill-sep" aria-hidden="true" />
           <span className="pill">{sourceTag.toLowerCase()}</span>
+        </div>
+        <div className="topbar-right">
           <button
             className="pill pill-button"
             onClick={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
@@ -113,10 +116,11 @@ export function Workbench({ initialState }: Props) {
           >
             {theme === "light" ? "dark" : "light"}
           </button>
+          <span className="pill-sep" aria-hidden="true" />
+          <a className="topbar-link" href="https://github.com/pdj555/monte-carlo" rel="noopener noreferrer">
+            github
+          </a>
         </div>
-        <a className="topbar-link" href="https://github.com/pdj555/monte-carlo" rel="noopener noreferrer">
-          github
-        </a>
       </header>
 
       <h1 className="display-title" aria-label="Monte Carlo">
@@ -124,77 +128,106 @@ export function Workbench({ initialState }: Props) {
         <span>Carlo</span>
       </h1>
 
-      <section className="frame frame-config" aria-label="Run configuration">
-        <h2 className="frame-label">Run</h2>
-        <form className="config-row" onSubmit={onSubmit}>
-          <div className="option-row" role="group" aria-label="Job">
-            {jobOptions.map((option) => (
-              <button
-                aria-pressed={request.job === option.value}
-                className={request.job === option.value ? "is-active" : ""}
-                key={option.value}
-                onClick={() => updateRequest({ job: option.value })}
-                type="button"
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          <input
-            aria-label="Tickers"
-            autoComplete="off"
-            className="ticker-input"
-            onChange={(event) => updateRequest({ tickers: event.target.value })}
-            placeholder="AAPL MSFT"
-            spellCheck={false}
-            type="text"
-            value={request.tickers}
-          />
-
-          <div className="option-row" role="group" aria-label="Data source">
-            {sourceOptions.map((option) => (
-              <button
-                aria-pressed={request.source === option.value}
-                className={request.source === option.value ? "is-active" : ""}
-                key={option.value}
-                onClick={() => selectSource(option.value)}
-                type="button"
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          {request.source === "local" ? (
-            <input
-              aria-label="CSV path"
-              autoComplete="off"
-              className="path-input"
-              onChange={(event) => updateRequest({ dataPath: event.target.value })}
-              placeholder="sample_data"
-              spellCheck={false}
-              type="text"
-              value={request.dataPath ?? ""}
-            />
-          ) : null}
-
-          <button className="run-button" disabled={isPending || !canRun} type="submit">
-            {isPending ? "Running…" : "Run"}
-          </button>
-        </form>
-      </section>
-
       <section className="status-line" aria-live="polite">
-        <span>{state.eyebrow}</span>
-        <span>{state.title}</span>
-        <span>{state.request.tickers.replaceAll(" ", " · ")}</span>
-        {provenance ? <span>{provenance}</span> : null}
+        <span className="status-tag">{state.eyebrow}</span>
+        <span className="status-sep" aria-hidden="true" />
+        <span className="status-headline">{state.title}</span>
+        <span className="status-sep" aria-hidden="true" />
+        <span className="status-meta">{state.request.tickers.replaceAll(" ", " · ")}</span>
+        {provenance ? (
+          <>
+            <span className="status-sep" aria-hidden="true" />
+            <span className="status-meta">{provenance}</span>
+          </>
+        ) : null}
       </section>
 
       <RunResults isPending={isPending} state={state} />
 
-      <footer className="site-footer">python · provenance · walk-forward</footer>
+      <section className="frame frame-config" aria-label="Run configuration">
+        <h2 className="frame-label">Run</h2>
+        <form className="config-grid" onSubmit={onSubmit}>
+          <div className="config-field">
+            <span className="field-label">Mode</span>
+            <div className="option-row" role="group" aria-label="Job">
+              {jobOptions.map((option) => (
+                <button
+                  aria-pressed={request.job === option.value}
+                  className={request.job === option.value ? "is-active" : ""}
+                  key={option.value}
+                  onClick={() => updateRequest({ job: option.value })}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="config-field config-field-tickers">
+            <label className="field-label" htmlFor="ticker-input">
+              Tickers
+            </label>
+            <input
+              autoComplete="off"
+              className="ticker-input"
+              id="ticker-input"
+              onChange={(event) => updateRequest({ tickers: event.target.value })}
+              placeholder="AAPL MSFT"
+              spellCheck={false}
+              type="text"
+              value={request.tickers}
+            />
+          </div>
+
+          <div className="config-field">
+            <span className="field-label">Data</span>
+            <div className="option-row" role="group" aria-label="Data source">
+              {sourceOptions.map((option) => (
+                <button
+                  aria-pressed={request.source === option.value}
+                  className={request.source === option.value ? "is-active" : ""}
+                  key={option.value}
+                  onClick={() => selectSource(option.value)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {request.source === "local" ? (
+            <div className="config-field config-field-path">
+              <label className="field-label" htmlFor="path-input">
+                Path
+              </label>
+              <input
+                autoComplete="off"
+                className="path-input"
+                id="path-input"
+                onChange={(event) => updateRequest({ dataPath: event.target.value })}
+                placeholder="sample_data"
+                spellCheck={false}
+                type="text"
+                value={request.dataPath ?? ""}
+              />
+            </div>
+          ) : null}
+
+          <div className="config-actions">
+            <button className="run-button" disabled={isPending || !canRun} type="submit">
+              {isPending ? "Running…" : "Run"}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <footer className="site-footer">
+        <span>research only · not investment advice</span>
+        <span className="footer-sep" aria-hidden="true" />
+        <span>python · provenance · walk-forward</span>
+      </footer>
     </div>
   );
 }

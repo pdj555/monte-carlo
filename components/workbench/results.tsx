@@ -23,39 +23,46 @@ export function RunResults({ state, isPending }: Props) {
             />
           </figure>
         ) : (
-          <div className="chart chart-empty">{isPending ? "Running…" : "—"}</div>
+          <div className="chart chart-empty">
+            <span>{isPending ? "Running…" : "Run to generate paths"}</span>
+          </div>
         )}
       </section>
 
-      {state.metrics.length > 0 ? (
-        <section className="frame frame-metrics">
-          <h2 className="frame-label">Metrics</h2>
-          <div className="metric-row">
-            {state.metrics.map((metric) => (
-              <p className="metric-line" key={metric.label}>
-                <span className="metric-label">{metric.label}</span>
-                <span className="metric-value">{metric.value}</span>
-              </p>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      <section className="frame frame-result">
-        <h2 className="frame-label">Read</h2>
-        <p className="result-copy">{state.summary}</p>
-        {state.notes.length > 0 ? (
-          <ul className="note-list">
-            {state.notes.map((note) => (
-              <li key={note}>{note}</li>
-            ))}
-          </ul>
+      <div className="insight-row">
+        {state.metrics.length > 0 ? (
+          <section className="frame frame-metrics">
+            <h2 className="frame-label">Metrics</h2>
+            <div className="metric-grid">
+              {state.metrics.map((metric) => (
+                <div className="metric-cell" key={metric.label}>
+                  <span className="metric-label">{metric.label}</span>
+                  <span className="metric-value">{metric.value}</span>
+                </div>
+              ))}
+            </div>
+          </section>
         ) : null}
-      </section>
+
+        <section className="frame frame-result">
+          <h2 className="frame-label">Read</h2>
+          <p className="result-copy">{state.summary}</p>
+          {state.notes.length > 0 ? (
+            <ul className="note-list">
+              {state.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      </div>
 
       {state.detailsText ? (
         <details className="frame frame-log">
-          <summary>Log</summary>
+          <summary>
+            <span>Log</span>
+            <span className="log-chevron" aria-hidden="true" />
+          </summary>
           <pre>{state.detailsText}</pre>
         </details>
       ) : null}
