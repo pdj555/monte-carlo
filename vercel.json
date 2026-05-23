@@ -1,9 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "installCommand": "npm install && python3 -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -r requirements.txt",
+  "installCommand": "npm install",
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
+  "functions": {
+    "api/engine.py": {
+      "maxDuration": 60
+    }
+  },
   "env": {
     "MPLBACKEND": "Agg"
   },

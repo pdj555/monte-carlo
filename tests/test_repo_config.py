@@ -16,8 +16,20 @@ def test_vercel_config_targets_flask_app_without_legacy_builds() -> None:
     assert config["framework"] == "nextjs"
     assert "builds" not in config
     assert config["buildCommand"] == "npm run build"
-    assert "requirements.txt" in config["installCommand"]
-    assert ".venv/bin/pip install" in config["installCommand"]
+    assert Path("requirements.txt").exists()
+    assert Path("api/engine.py").exists()
+    assert config["functions"]["api/engine.py"]["maxDuration"] == 60
+
+
+def test_next_config_traces_python_engine_for_runtime_routes() -> None:
+    tracing = Path("lib/engine-tracing.ts").read_text(encoding="utf-8")
+    config = Path("next.config.ts").read_text(encoding="utf-8")
+
+    assert "outputFileTracingIncludes" in config
+    assert "engineTraceIncludes" in config
+    assert "ui_bridge.py" in tracing
+    assert "python_packages" in tracing
+    assert '"/api/run"' in tracing or "'/api/run'" in tracing
 
 
 def test_runtime_files_use_next_for_ui_and_python_for_engine() -> None:

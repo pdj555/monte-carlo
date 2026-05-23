@@ -174,3 +174,5 @@ def test_next_ui_files_present_the_public_surface() -> None:
     assert "RunResults" in workbench
     assert 'source: "auto"' in page
     assert 'runtime = "nodejs"' in route
+    assert "runViaVercelEngine" in bridge
+    assert Path("api/engine.py").exists()

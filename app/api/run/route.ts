@@ -20,6 +20,6 @@ export async function POST(request: Request) {
     });
   }
 
-  const payload = await runWorkbench(body);
+  const payload = await runWorkbench(body, { origin: request.url });
   return NextResponse.json(payload);
 }
