@@ -27,6 +27,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
+      - name: Set up Node
+        if: matrix.python-version == '3.12'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
       - name: Install base dependencies
         run: |
           python -m pip install --upgrade pip
@@ -53,19 +60,23 @@ jobs:
           monte-carlo simulate AAPL --source offline --data-path sample_data --days 5 --scenarios 10
           monte-carlo backtest AAPL --source offline --data-path sample_data --lookback 5 --hold 3 --rebalance 3 --top 1 --scenarios 10
           monte-carlo-ui > ui.out 2>&1 || test $? -eq 2
-          grep -F "Install \`python3 -m pip install -e .[ui]\`" ui.out
+          grep -F "Run \`npm install\` and \`npm run dev\`" ui.out
 
       - name: Tests
         env:
           MPLBACKEND: Agg
         run: pytest -q
 
-      - name: Install UI extras
+      - name: Install Next.js dependencies
         if: matrix.python-version == '3.12'
-        run: python -m pip install -e .[dev,ui]
+        run: npm ci
 
-      - name: Browser UI tests
+      - name: Next.js typecheck
+        if: matrix.python-version == '3.12'
+        run: npm run typecheck
+
+      - name: Next.js build
         if: matrix.python-version == '3.12'
         env:
           MPLBACKEND: Agg
-        run: pytest tests/test_web_ui.py -q
+        run: npm run build

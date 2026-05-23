@@ -4,4 +4,3 @@ seaborn>=0.13
 numpy>=1.26
 pandas>=2.2
 matplotlib>=3.8
-Flask>=3.0

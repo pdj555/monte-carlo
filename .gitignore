@@ -7,12 +7,21 @@ __pycache__/
 .venv/
 venv/
 env/
+.python_packages/
+python_packages/
 .env/
+.env*.local
 
 # Packaging
 build/
 dist/
 *.egg-info/
+
+# Node / Next.js
+node_modules/
+.next/
+npm-debug.log*
+tsconfig.tsbuildinfo
 
 # Test / tooling caches
 .pytest_cache/
@@ -20,12 +29,34 @@ dist/
 .ruff_cache/
 .coverage
 htmlcov/
+.cache/
+
+# Agent / IDE runtime (never commit)
+.agent/
+.claude/
+.codex/
+.cursor/
+.playwright-cli/
+.playwright-mcp/
+*.log
+
+# Local design captures
+/dist-*.png
+/distro-*.png
+/monte-carlo-*.png
+/workbench-*.png
+
+# Agent instruction mirrors (canonical: AGENTS.md)
+CLAUDE.md
+GEMINI.md
+WARP.md
 
 # OS files
 .DS_Store
 
 # Project outputs (CLI artefacts)
 results/
+output/
 *_distribution.png
 *_paths.png
 *_ai_summary.md

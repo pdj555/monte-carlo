@@ -149,8 +149,9 @@ def test_public_simulate_auto_source_handles_multiindex_download(monkeypatch, ca
         columns=columns,
     )
 
-    def _download(_ticker, start=None, end=None, progress=False):
+    def _download(_ticker, start=None, end=None, progress=False, **kwargs):
         assert progress is False
+        assert kwargs.get("period") == "max"
         return downloaded
 
     monkeypatch.setattr(data.yf, "download", _download)
@@ -172,8 +173,9 @@ def test_public_backtest_auto_source_handles_multiindex_download(monkeypatch, ca
         columns=columns,
     )
 
-    def _download(_ticker, start=None, end=None, progress=False):
+    def _download(_ticker, start=None, end=None, progress=False, **kwargs):
         assert progress is False
+        assert kwargs.get("period") == "max"
         return downloaded
 
     monkeypatch.setattr(data.yf, "download", _download)

@@ -208,7 +208,10 @@ def plot_paths(
             label="5-95% band",
         )
 
+    existing_line_count = len(ax.lines)
     prices_to_plot.plot(ax=ax, legend=False, color=color, linewidth=1.0, alpha=0.25)
+    for line in ax.lines[existing_line_count:]:
+        line.set_label("_nolegend_")
 
     if prices_all.shape[1] > 1:
         mean_path = prices_all.mean(axis=1)

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "monte-carlo-sim"
 version = "0.1.0"
-description = "Monte Carlo decision engine for simulation, backtesting, and a lean browser UI."
+description = "Monte Carlo decision engine with a Next.js workbench, simulation, backtesting, and provenance-aware outputs."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
@@ -20,11 +20,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["flake8", "pytest"]
-ui = ["Flask"]
+ui = []
 
 [project.scripts]
 monte-carlo = "public_cli:main"
-monte-carlo-ui = "app:main"
+monte-carlo-ui = "web_entrypoint:main"
 
 [tool.setuptools]
-py-modules = ["analysis", "ai", "app", "backtest", "cli", "cli_shared", "data", "decision", "legacy_cli", "public_cli", "simulate_cli", "simulation", "viz"]
+py-modules = ["analysis", "ai", "backtest", "cli", "cli_shared", "data", "decision", "legacy_cli", "public_cli", "simulate_cli", "simulation", "ui_bridge", "ui_state", "viz", "web_entrypoint"]

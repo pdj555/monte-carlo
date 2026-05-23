@@ -2,29 +2,33 @@
 
 ## Project Structure & Module Organization
 
-- `app.py`: lean Flask UI for the browser surface and local `monte-carlo-ui` entrypoint.
-- `legacy_cli.py`: full deprecated simulation parser and runner behind the thin `cli.py` facade.
+- `app/`: Next.js App Router surface and `/api/run` route.
+- `components/workbench/`: browser UI (controls, results, layout).
+- `lib/types.ts`: TypeScript contracts for the workbench API.
+- `lib/python-bridge.ts`: Node spawn bridge to `ui_bridge.py`.
+- `ui_state.py`: presentation state builder shared by the browser bridge.
+- `ui_bridge.py`: JSON bridge used by the Next.js API route.
+- `web_entrypoint.py`: local `monte-carlo-ui` launcher for the Next.js workbench.
 - `public_cli.py`: public CLI implementation for `monte-carlo simulate|backtest`.
 - `simulate_cli.py`: shared simulation workflow used by public and legacy entrypoints.
 - `cli_shared.py`: shared parser and rendering helpers for CLI surfaces.
-- `cli.py`: thin deprecated simulation wrapper and compatibility facade.
 - `backtest.py`: walk-forward engine plus deprecated backtest wrapper.
-- `MonteCarlo.py`: legacy single-ticker script (kept for backwards compatibility).
 - `simulation.py`: vectorized simulation engines (`simulate_prices`, `simulate_gbm`).
-- `data.py`: price retrieval via `yfinance`, plus offline CSV fallback (`sample_data/<TICKER>.csv`).
+- `data.py`: price retrieval via `yfinance`, plus offline CSV fallback.
 - `analysis.py`: summary statistics for simulated final prices.
-- `viz.py`: plotting helpers (returns `matplotlib` `Figure`s).
-- `tests/`: `pytest` suite (note: `tests/conftest.py` adds repo root to `sys.path`).
-- `docs/`: project standards (`docs/constitution.md`) and improvement notes.
+- `decision.py`: ranking, guardrails, allocation, and action-plan logic.
+- `viz.py`: plotting helpers that return `matplotlib` `Figure`s.
+- `tests/`: `pytest` suite.
+- `docs/`: project standards and operator references.
 
 ## Build, Test, and Development Commands
 
 ```bash
 python3 -m pip install -e .
+npm install
 
-# Browser UI
-python3 -m pip install -e .[ui]
-monte-carlo-ui
+# Browser workbench
+npm run dev
 
 # Run simulations
 monte-carlo simulate AAPL MSFT --days 252 --scenarios 5000 --model gbm --seed 42 --output results
@@ -36,26 +40,29 @@ monte-carlo backtest AAPL MSFT --lookback 60 --hold 20 --rebalance 20 --model gb
 monte-carlo simulate AAPL --source offline --data-path sample_data
 
 # Tests
-pytest
-pytest tests/test_simulation.py
+pytest -q
+npm run typecheck
+npm run build
 ```
 
-Tip: to avoid GUI pop-ups in headless environments, set `MPLBACKEND=Agg` and leave `--show` off unless you want plots on screen.
+Tip: set `MPLBACKEND=Agg` in headless environments and leave `--show` off unless you want plots on screen.
 
 ## Coding Style & Naming Conventions
 
 - Follow `docs/constitution.md`: keep changes small, readable, and well-tested.
-- Python style: PEP 8, 4-space indentation, `snake_case` for functions/vars, `PascalCase` for classes.
-- Prefer type hints and clear docstrings (most modules use `from __future__ import annotations`).
-- Keep simulation code vectorized (NumPy/Pandas) and validate inputs early with actionable errors (`ValueError`, `PriceDataError`).
+- Python style: PEP 8, 4-space indentation, `snake_case` for functions/vars.
+- TypeScript style: strict types, small components, server work in route handlers or server modules.
+- Prefer type hints and clear docstrings in Python modules.
+- Keep simulation code vectorized and validate inputs early with actionable errors.
 
 ## Testing Guidelines
 
-- Use `pytest`; new features should include tests for happy paths and edge cases.
-- Tests should be deterministic: pass explicit `seed` values and avoid live network calls (use offline CSVs).
+- Use `pytest` for Python and `npm run typecheck` / `npm run build` for Next.js.
+- New features should include deterministic tests for happy paths and edge cases.
+- Avoid live network calls in tests; use offline CSV fixtures.
 
 ## Commit & Pull Request Guidelines
 
-- Git history trends toward short, imperative commit subjects (e.g., “Add…”, “Fix…”); keep messages specific and scoped.
-- PRs should include: summary of behavior change, how you validated it (e.g., `pytest` output), and screenshots when plot output changes.
-- Don’t commit generated artefacts (plots should go under an `--output` directory like `results/`).
+- Use short, imperative commit subjects.
+- PRs should include behavior summary, validation commands, and screenshots when UI output changes.
+- Do not commit generated artifacts, `.next/`, `node_modules/`, plots, or local agent runtime files.

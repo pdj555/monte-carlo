@@ -1,36 +1,38 @@
 # Improvement Backlog
 
-This document tracks follow-on work for the current CLI and package layout.
-It no longer describes the retired pre-subcommand scripts as the primary
+This backlog tracks follow-on work for the public CLI, Python engine, and
+Next.js workbench. It no longer treats deprecated scripts as the primary
 interface.
 
 ## Live Interface
 
-- Install locally with `python3 -m pip install -e .`
+- Install the Python engine with `python3 -m pip install -e .`
+- Install the browser surface with `npm install`
 - Run simulations with `monte-carlo simulate [TICKER ...]`
 - Run walk-forward validation with `monte-carlo backtest [TICKER ...]`
+- Run the browser workbench with `npm run dev`
 - Keep `python cli.py`, `python backtest.py`, and `python MonteCarlo.py` only
   as deprecated compatibility wrappers during migration
 
 ## Current Opportunities
 
-### 1. Keep sample-data smoke tests broad
+### 1. Add scenario-set evaluations
 
-The bundled offline path now covers `AAPL.csv` and `MSFT.csv`. The next useful
-follow-on would be keeping docs, install smoke tests, and browser checks aligned
-with those fixtures whenever the sample data changes so the deterministic path
-stays trustworthy.
+Persist named evaluation sets that exercise multiple universes, seeds, models,
+and source modes. The highest-value version is a single command that produces a
+small scorecard for ranking stability, data-source reliability, and downside
+guardrail behavior.
 
-### 2. Keep the browser UI modular
+### 2. Make the bridge contract typed end to end
 
-The current browser UI is still easy to use, but `app.py` now owns CSS, HTML,
-request parsing, and page-state builders in one file. The next UI feature
-should be the trigger to split rendering and state helpers so the happy path
-stays easy to change.
+The Next.js UI currently calls a compact JSON bridge over `ui_bridge.py`. The
+next refinement is to generate a shared schema for `WorkbenchPayload`, validate
+the Python response at the route boundary, and keep the UI resilient when a
+field is missing.
 
-### 3. Extend provenance checks when new artefacts appear
+### 3. Extend provenance checks when new artifacts appear
 
-Simulation reports and backtest folders now persist source provenance. Future
+Simulation reports and backtest folders persist source provenance. Future
 export formats should keep the same audit trail and land with regression
 coverage so offline, cached, and live runs stay auditable after the terminal
 closes.

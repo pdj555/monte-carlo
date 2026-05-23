@@ -26,6 +26,23 @@ def test_plot_paths_limits_drawn_paths():
     plt.close(fig)
 
 
+def test_plot_paths_legend_omits_individual_scenarios():
+    rng = np.random.default_rng(1)
+    days = 20
+    scenarios = 120
+    shocks = rng.normal(loc=0.0, scale=0.02, size=(days, scenarios))
+    prices = 100.0 * np.exp(np.cumsum(shocks, axis=0))
+    df = pd.DataFrame(prices)
+
+    fig = plot_paths(df, ticker="AAPL", max_paths=10)
+    legend = fig.axes[0].get_legend()
+
+    assert legend is not None
+    labels = [text.get_text() for text in legend.get_texts()]
+    assert labels == ["5-95% band", "Mean"]
+    plt.close(fig)
+
+
 def test_plot_distribution_rejects_invalid_current_price():
     df = pd.DataFrame([[100.0, 101.0, 99.5]])
     with pytest.raises(ValueError):

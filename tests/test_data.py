@@ -39,10 +39,11 @@ def test_fetch_prices_saves_cache_after_network(tmp_path, monkeypatch):
     dates = pd.date_range("2024-01-01", periods=4, freq="D")
     downloaded = pd.DataFrame({"Close": [10.0, 11.0, 12.0, 13.0]}, index=dates)
 
-    def _download(_ticker, start=None, end=None, progress=False):
+    def _download(_ticker, start=None, end=None, progress=False, **kwargs):
         assert start is None
         assert end is None
         assert progress is False
+        assert kwargs.get("period") == "max"
         return downloaded
 
     monkeypatch.setattr(data.yf, "download", _download)
@@ -64,8 +65,9 @@ def test_fetch_prices_normalizes_multiindex_close_from_yfinance(monkeypatch):
     columns = pd.MultiIndex.from_product([["Close"], ["AAPL"]])
     downloaded = pd.DataFrame([[10.0], [11.0], [12.0], [13.0]], index=dates, columns=columns)
 
-    def _download(_ticker, start=None, end=None, progress=False):
+    def _download(_ticker, start=None, end=None, progress=False, **kwargs):
         assert progress is False
+        assert kwargs.get("period") == "max"
         return downloaded
 
     monkeypatch.setattr(data.yf, "download", _download)
@@ -159,9 +161,10 @@ def test_fetch_prices_cache_is_not_date_range_dependent(tmp_path, monkeypatch):
 
     captured = {}
 
-    def _download(_ticker, start=None, end=None, progress=False):
+    def _download(_ticker, start=None, end=None, progress=False, **kwargs):
         captured["start"] = start
         captured["end"] = end
+        captured["period"] = kwargs.get("period")
         captured["progress"] = progress
         return downloaded
 
@@ -176,6 +179,7 @@ def test_fetch_prices_cache_is_not_date_range_dependent(tmp_path, monkeypatch):
     )
     assert captured["start"] is None
     assert captured["end"] is None
+    assert captured["period"] == "max"
     assert captured["progress"] is False
     assert sliced.index.min() >= pd.Timestamp("2024-01-05")
     assert sliced.index.max() <= pd.Timestamp("2024-01-07")

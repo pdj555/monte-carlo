@@ -1,13 +1,11 @@
-"""Lean web UI for the Monte Carlo decision engine."""
+"""Presentation state for the Monte Carlo browser UI."""
 
 from __future__ import annotations
 
 import io
 import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
@@ -24,38 +22,22 @@ from public_cli import (  # noqa: E402
 )
 from viz import plot_equity_curve, plot_paths  # noqa: E402
 
-try:
-    from flask import (  # noqa: E402
-        Flask,
-        Response,
-        render_template_string,
-        request as flask_request,
-        send_from_directory,
-    )
-except ModuleNotFoundError as exc:  # pragma: no cover - covered through entrypoint tests
-    Flask = None  # type: ignore[assignment]
-    Response = Any  # type: ignore[misc,assignment]
-    render_template_string = None  # type: ignore[assignment]
-    flask_request = None  # type: ignore[assignment]
-    send_from_directory = None  # type: ignore[assignment]
-    _FLASK_IMPORT_ERROR: ModuleNotFoundError | None = exc
-else:
-    _FLASK_IMPORT_ERROR = None
-
 REPO_ROOT = Path(__file__).resolve().parent
-PUBLIC_DIR = REPO_ROOT / "public"
 SAMPLE_DATA_DIR = REPO_ROOT / "sample_data"
 DEFAULT_TICKERS = "AAPL"
 DEMO_SEED = "42"
+
 CHOICES = {
     "job": ("simulate", "backtest"),
-    "source": ("demo", "auto", "local"),
+    "source": ("auto", "online", "demo", "local"),
 }
 SOURCE_NOTES = {
+    "auto": "Live Yahoo Finance prices with CSV fallback.",
+    "online": "Live Yahoo Finance prices only.",
     "demo": "Bundled sample. Fast and offline.",
-    "auto": "Live first. CSV fallback if prices are unavailable.",
     "local": (
-        "Use one CSV, or a folder of <TICKER>.csv files, with Date and Close columns."
+        "Use one CSV, or a folder of <TICKER>.csv files, with Date and Close "
+        "columns."
     ),
 }
 STANCE_LABELS = {
@@ -64,213 +46,20 @@ STANCE_LABELS = {
     "DEFENSIVE": "Defensive",
     "NO_TRADE": "Stand aside",
 }
-FLASK_INSTALL_HINT = (
-    "Browser UI needs the optional UI extra. "
-    "Install `python3 -m pip install -e .[ui]`."
-)
-
-PAGE_TEMPLATE = """
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
-    <meta name="description"
-      content="Monte Carlo — a decision engine for current ideas and historical backtests.">
-    <title>Monte Carlo — Decision engine</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="/styles.css">
-  </head>
-  <body>
-    <main class="shell">
-      <header class="masthead">
-        <a class="brand" href="/" aria-label="Monte Carlo home">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <span>Monte Carlo</span>
-        </a>
-      </header>
-
-      <section class="workspace">
-        <form class="controls" method="post" data-ui-form>
-          <div class="panel-heading">
-            <p class="eyebrow">Setup</p>
-            <h1>Run</h1>
-          </div>
-
-          <div class="group group-job">
-            <fieldset>
-              <legend>Job</legend>
-              <div class="choice-row">
-                {% for value, label in job_options %}
-                  <label class="choice">
-                    <input
-                      type="radio"
-                      name="job"
-                      value="{{ value }}"
-                      {% if state.request.job == value %}checked{% endif %}
-                    >
-                    <span>{{ label }}</span>
-                  </label>
-                {% endfor %}
-              </div>
-            </fieldset>
-          </div>
-
-          <label class="group group-tickers">
-            <span>Tickers</span>
-            <input
-              type="text"
-              name="tickers"
-              value="{{ state.request.tickers }}"
-              placeholder="AAPL MSFT"
-              autocomplete="off"
-            >
-          </label>
-
-          <div class="group group-source">
-            <fieldset>
-              <legend>Source</legend>
-              <div class="choice-row" data-source-picker>
-                {% for value, label in source_options %}
-                  <label class="choice">
-                    <input
-                      type="radio"
-                      name="source"
-                      value="{{ value }}"
-                      data-note="{{ source_notes[value] }}"
-                      {% if state.request.source == value %}checked{% endif %}
-                    >
-                    <span>{{ label }}</span>
-                  </label>
-                {% endfor %}
-              </div>
-            </fieldset>
-          </div>
-
-          <p class="source-note" data-source-note>{{ state.source_note }}</p>
-
-          <label
-            class="group group-path"
-            data-local-path
-            {% if state.request.source != "local" %}hidden{% endif %}
-          >
-            <span>CSV file or folder</span>
-            <input
-              type="text"
-              name="data_path"
-              value="{{ state.request.data_path or '' }}"
-              placeholder="/Users/you/data or /Users/you/AAPL.csv"
-              autocomplete="off"
-            >
-          </label>
-
-          <div class="run-strip">
-            <button type="submit" data-run-button>
-              Run {{ "backtest" if state.request.job == "backtest" else "simulation" }}
-            </button>
-          </div>
-        </form>
-
-        <section class="result" aria-live="polite">
-          {% if state.error %}
-            <div class="alert">{{ state.error }}</div>
-          {% endif %}
-
-          <div class="headline">
-            <div class="result-topline">
-              <p class="eyebrow">{{ state.eyebrow }}</p>
-            </div>
-            <h2>{{ state.title }}</h2>
-            <p class="summary">{{ state.summary }}</p>
-          </div>
-
-          {% if state.metrics %}
-            <section class="metrics" aria-label="Run metrics">
-              {% for metric in state.metrics %}
-                <article class="metric">
-                  <div class="metric-label">{{ metric.label }}</div>
-                  <div class="metric-value">{{ metric.value }}</div>
-                </article>
-              {% endfor %}
-            </section>
-          {% endif %}
-
-          {% if state.chart_svg %}
-            <figure class="chart">
-              <div class="chart-figure" role="img" aria-label="{{ state.chart_alt }}">
-                {{ state.chart_svg|safe }}
-              </div>
-            </figure>
-          {% endif %}
-
-          {% if state.notes %}
-            <ul class="notes">
-              {% for note in state.notes %}
-                <li>{{ note }}</li>
-              {% endfor %}
-            </ul>
-          {% endif %}
-
-          {% if state.details_text %}
-            <details>
-              <summary>Details</summary>
-              <pre>{{ state.details_text }}</pre>
-            </details>
-          {% endif %}
-        </section>
-      </section>
-
-      <footer class="signature">
-        <span>Monte&nbsp;Carlo decision engine</span>
-        <a href="https://github.com/pdj555/monte-carlo" rel="noopener">Source on GitHub</a>
-      </footer>
-    </main>
-
-    <script>
-      const form = document.querySelector("[data-ui-form]");
-      const localPath = document.querySelector("[data-local-path]");
-      const runButton = document.querySelector("[data-run-button]");
-      const sourceNote = document.querySelector("[data-source-note]");
-
-      function syncSource() {
-        const selected = form.querySelector("input[name='source']:checked");
-        localPath.hidden = !selected || selected.value !== "local";
-        if (selected && sourceNote) {
-          sourceNote.textContent = selected.dataset.note || "";
-        }
-      }
-
-      function syncRunLabel() {
-        const selectedJob = form.querySelector("input[name='job']:checked");
-        const label = selectedJob ? selectedJob.value : "simulate";
-        runButton.textContent = label === "backtest" ? "Run backtest" : "Run simulation";
-      }
-
-      form.addEventListener("change", () => {
-        syncSource();
-        syncRunLabel();
-      });
-      form.addEventListener("submit", () => {
-        runButton.textContent = "Running";
-        runButton.disabled = true;
-      });
-
-      syncSource();
-      syncRunLabel();
-    </script>
-  </body>
-</html>
-"""
 
 
 @dataclass(frozen=True)
 class UIRequest:
+    """Normalized browser request values."""
+
     job: str = "simulate"
     tickers: str = DEFAULT_TICKERS
     source: str = "demo"
     data_path: str | None = None
+
+    @property
+    def ticker_label(self) -> str:
+        return ", ".join(_ticker_tokens(self.tickers))
 
 
 @dataclass(frozen=True)
@@ -300,7 +89,11 @@ def _coerce_choice(raw: str | None, *, group: str, default: str) -> str:
 
 
 def _ticker_tokens(raw: str) -> list[str]:
-    tokens = [token.strip().upper() for token in raw.replace(",", " ").split() if token.strip()]
+    tokens = [
+        token.strip().upper()
+        for token in raw.replace(",", " ").split()
+        if token.strip()
+    ]
     return tokens or [DEFAULT_TICKERS]
 
 
@@ -331,6 +124,19 @@ def request_from_form(form: object) -> UIRequest:
     )
 
 
+def request_from_payload(payload: dict[str, object]) -> UIRequest:
+    raw_path = payload.get("data_path")
+    if raw_path is None:
+        raw_path = payload.get("dataPath")
+    data_path = str(raw_path).strip() if raw_path else None
+    return _normalise_request(
+        job=str(payload.get("job") or "simulate"),
+        tickers=str(payload.get("tickers") or DEFAULT_TICKERS),
+        source=str(payload.get("source") or "auto"),
+        data_path=data_path,
+    )
+
+
 def validate_request(ui_request: UIRequest) -> str | None:
     if ui_request.source == "local":
         if ui_request.data_path is None:
@@ -338,6 +144,51 @@ def validate_request(ui_request: UIRequest) -> str | None:
         if not Path(ui_request.data_path).expanduser().exists():
             return "That path was not found. Choose a CSV file or folder that exists."
     return None
+
+
+def _uses_sample_data(ui_request: UIRequest) -> bool:
+    if ui_request.source == "demo":
+        return True
+    if ui_request.source != "local" or not ui_request.data_path:
+        return False
+    try:
+        return Path(ui_request.data_path).expanduser().resolve().is_relative_to(
+            SAMPLE_DATA_DIR.resolve()
+        )
+    except OSError:
+        return False
+
+
+def _ui_backtest_short_argv() -> list[str]:
+    return [
+        "--lookback",
+        "5",
+        "--hold",
+        "3",
+        "--rebalance",
+        "3",
+        "--top",
+        "1",
+        "--scenarios",
+        "10",
+    ]
+
+
+def _ui_backtest_live_argv() -> list[str]:
+    return [
+        "--lookback",
+        "60",
+        "--hold",
+        "20",
+        "--rebalance",
+        "20",
+        "--top",
+        "1",
+        "--scenarios",
+        "100",
+        "--seed",
+        DEMO_SEED,
+    ]
 
 
 def build_public_argv(ui_request: UIRequest) -> list[str]:
@@ -365,24 +216,26 @@ def build_public_argv(ui_request: UIRequest) -> list[str]:
                 str(Path(ui_request.data_path or "").expanduser()),
             ]
         )
+    elif ui_request.source == "online":
+        argv.extend(["--source", "online"])
     else:
-        argv.extend(["--source", "auto"])
-
-    if ui_request.job == "backtest" and ui_request.source == "demo":
         argv.extend(
             [
-                "--lookback",
-                "5",
-                "--hold",
-                "3",
-                "--rebalance",
-                "3",
-                "--top",
-                "1",
-                "--scenarios",
-                "10",
+                "--source",
+                "auto",
+                "--data-path",
+                str(SAMPLE_DATA_DIR),
             ]
         )
+
+    if ui_request.job == "backtest":
+        if _uses_sample_data(ui_request):
+            argv.extend(_ui_backtest_short_argv())
+            if "--seed" not in argv:
+                argv.extend(["--seed", DEMO_SEED])
+        else:
+            argv.extend(_ui_backtest_live_argv())
+
     return argv
 
 
@@ -390,12 +243,11 @@ def _format_pct(value: float, *, signed: bool = False) -> str:
     return f"{value:+.1%}" if signed else f"{value:.1%}"
 
 
-# Editorial palette — must stay aligned with public/styles.css.
-_CHART_PAPER = "#f4efe6"
-_CHART_MUTED = "#8d877c"
-_CHART_HAIRLINE = "#2a2724"
-_CHART_GOLD = "#d4a373"
-_CHART_SAGE = "#8fb59a"
+# Chart palette aligned with the DisTrO-style workbench.
+_CHART_INK = "#1769ff"
+_CHART_MUTED = "#74a7ff"
+_CHART_HAIRLINE = "#74a7ff"
+_CHART_LINE = "#1769ff"
 
 
 def _apply_chart_style(fig: plt.Figure) -> None:
@@ -422,7 +274,7 @@ def _apply_chart_style(fig: plt.Figure) -> None:
         if ax.get_title():
             ax.set_title(
                 ax.get_title(),
-                color=_CHART_PAPER,
+                color=_CHART_INK,
                 fontsize=12,
                 pad=14,
                 loc="left",
@@ -433,13 +285,16 @@ def _apply_chart_style(fig: plt.Figure) -> None:
         if ax.get_ylabel():
             ax.set_ylabel(ax.get_ylabel(), color=_CHART_MUTED, fontsize=10)
         for line in ax.get_lines():
-            if line.get_color() in {"C0", "#1f77b4", "tab:blue", "blue"}:
-                line.set_color(_CHART_GOLD)
-            line.set_linewidth(max(line.get_linewidth(), 0.9))
+            lw = float(line.get_linewidth() or 1.0)
+            line.set_color(_CHART_INK if lw >= 1.8 else _CHART_LINE)
+            line.set_linewidth(max(lw, 0.6))
+            line.set_alpha(1.0 if lw >= 1.8 else 0.28)
 
 
 def _encode_figure_svg(fig: plt.Figure) -> str:
     _apply_chart_style(fig)
+    fig.set_size_inches(9.6, 4.8)
+    fig.tight_layout()
     buffer = io.StringIO()
     fig.savefig(
         buffer,
@@ -450,7 +305,6 @@ def _encode_figure_svg(fig: plt.Figure) -> str:
     )
     plt.close(fig)
     raw = buffer.getvalue()
-    # Strip XML/doctype prologue so the SVG inlines cleanly inside the page.
     marker = raw.find("<svg")
     return raw[marker:] if marker != -1 else raw
 
@@ -486,6 +340,11 @@ def _simulate_chart_payload(result: dict[str, object]) -> tuple[str | None, str]
         title=f"{ticker} · simulated paths",
         max_paths=50,
     )
+    for ax in fig.get_axes():
+        ax.set_title("")
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
     return _encode_figure_svg(fig), f"Simulated price paths for {ticker}"
 
 
@@ -495,6 +354,11 @@ def _backtest_chart_payload(result: dict[str, object]) -> tuple[str | None, str]
         return None, ""
 
     fig = plot_equity_curve(equity_curve, title="Backtest · equity curve")
+    for ax in fig.get_axes():
+        ax.set_title("")
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
     return _encode_figure_svg(fig), "Backtest equity curve"
 
 
@@ -505,9 +369,7 @@ def _build_simulation_state(
 ) -> PageState:
     report = result["report"]
     if not isinstance(report, dict):
-        raise ValueError(
-            "Simulation report was not returned in the expected format."
-        )
+        raise ValueError("Simulation report was not returned in the expected format.")
 
     action_plan = report.get("action_plan", {})
     if not isinstance(action_plan, dict):
@@ -544,18 +406,9 @@ def _build_simulation_state(
         top_row = rankings.iloc[0]
         metrics = [
             Metric("Top ticker", top_ticker),
-            Metric(
-                "Expected return",
-                _format_pct(float(top_row["expected_return"])),
-            ),
-            Metric(
-                "Chance of gain",
-                _format_pct(float(top_row["prob_above_current"])),
-            ),
-            Metric(
-                "95% downside",
-                _format_pct(float(top_row["value_at_risk_95_pct"])),
-            ),
+            Metric("Expected return", _format_pct(float(top_row["expected_return"]))),
+            Metric("Chance of gain", _format_pct(float(top_row["prob_above_current"]))),
+            Metric("95% downside", _format_pct(float(top_row["value_at_risk_95_pct"]))),
         ]
 
     chart_svg, chart_alt = _simulate_chart_payload(result)
@@ -573,7 +426,7 @@ def _build_simulation_state(
     return PageState(
         request=ui_request,
         source_note=source_note,
-        eyebrow="Simulate",
+        eyebrow="Simulation",
         title=title,
         summary=summary,
         notes=tuple(notes),
@@ -601,9 +454,7 @@ def _build_backtest_state(
     summary = result["summary"]
     rebalance_log = result["rebalance_log"]
     if not isinstance(summary, pd.Series):
-        raise ValueError(
-            "Backtest summary was not returned in the expected format."
-        )
+        raise ValueError("Backtest summary was not returned in the expected format.")
 
     cash_comparison = _format_pct(
         float(summary["excess_return_vs_cash"]),
@@ -614,18 +465,9 @@ def _build_backtest_state(
         notes.append(f"Rebalances completed: {len(rebalance_log)}.")
 
     metrics = (
-        Metric(
-            "Strategy return",
-            _format_pct(float(summary["strategy_total_return"])),
-        ),
-        Metric(
-            "Annualized",
-            _format_pct(float(summary["strategy_annualized_return"])),
-        ),
-        Metric(
-            "Max drawdown",
-            _format_pct(float(summary["strategy_max_drawdown"])),
-        ),
+        Metric("Strategy return", _format_pct(float(summary["strategy_total_return"]))),
+        Metric("Annualized", _format_pct(float(summary["strategy_annualized_return"]))),
+        Metric("Max drawdown", _format_pct(float(summary["strategy_max_drawdown"]))),
         Metric(
             "Vs equal weight",
             _format_pct(float(summary["excess_return_vs_equal_weight"]), signed=True),
@@ -655,8 +497,9 @@ def _build_backtest_state(
 
 
 def _friendly_runtime_message(ui_request: UIRequest, raw_message: str) -> str:
-    if ui_request.source == "auto":
-        return "Live prices weren't available. Try again or switch to Sample or CSV."
+    if ui_request.source in {"auto", "online"} and "price history" not in raw_message.lower():
+        if "download" in raw_message.lower() or "network" in raw_message.lower():
+            return "Live prices weren't available. Try again or switch to Sample or CSV."
     return raw_message
 
 
@@ -712,58 +555,4 @@ def create_page_state(ui_request: UIRequest) -> PageState:
 
 
 def build_default_state() -> PageState:
-    return create_page_state(_normalise_request())
-
-
-app = Flask(__name__) if Flask is not None else None
-
-
-if app is not None:
-
-    @app.get("/styles.css")
-    def styles_css() -> Response:
-        return send_from_directory(PUBLIC_DIR, "styles.css", mimetype="text/css")
-
-    @app.get("/healthz")
-    def healthz() -> tuple[str, int]:
-        return "ok", 200
-
-    @app.get("/favicon.ico")
-    def favicon() -> Response:
-        return Response(status=204)
-
-    @app.route("/", methods=["GET", "POST"])
-    def index() -> str:
-        if flask_request.method == "POST":
-            ui_request = request_from_form(flask_request.form)
-        else:
-            ui_request = _normalise_request()
-        state = create_page_state(ui_request)
-        return render_template_string(
-            PAGE_TEMPLATE,
-            job_options=(("simulate", "Simulate"), ("backtest", "Backtest")),
-            source_options=(
-                ("demo", "Sample"),
-                ("auto", "Live"),
-                ("local", "CSV"),
-            ),
-            source_notes=SOURCE_NOTES,
-            state=state,
-        )
-
-
-def main() -> int:
-    if app is None:
-        print(FLASK_INSTALL_HINT, file=sys.stderr)
-        return 2
-
-    app.run(
-        host=os.environ.get("HOST", "127.0.0.1"),
-        port=int(os.environ.get("PORT", "8000")),
-        debug=False,
-    )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    return create_page_state(_normalise_request(source="demo"))
