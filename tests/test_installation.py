@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import os
 import shutil
 import subprocess
@@ -38,23 +37,6 @@ def _run_entrypoint(entrypoint: str, *args: str) -> subprocess.CompletedProcess[
         env={**os.environ, "MPLBACKEND": "Agg"},
         text=True,
     )
-
-
-def _installed_ui_entrypoint() -> str:
-    scripts_dir = Path(sys.executable).resolve().parent
-    candidates = [
-        scripts_dir / "monte-carlo-ui",
-        scripts_dir / "monte-carlo-ui.exe",
-    ]
-
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
-
-    resolved = shutil.which("monte-carlo-ui")
-    if resolved is None:
-        raise AssertionError("Installed `monte-carlo-ui` entrypoint was not found on PATH.")
-    return resolved
 
 
 def test_installed_entrypoint_serves_help_commands() -> None:
@@ -134,17 +116,24 @@ def test_installed_entrypoint_runs_offline_simulate_and_backtest() -> None:
 def test_pyproject_console_script_points_to_public_cli() -> None:
     text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'monte-carlo = "public_cli:main"' in text
-    assert 'monte-carlo-ui = "app:main"' in text
-    assert 'ui = ["Flask"]' in text
+    assert 'monte-carlo-ui = "web_entrypoint:main"' in text
+    assert '"ui_state"' in text
+    assert '"ui_bridge"' in text
 
 
-def test_installed_ui_entrypoint_reports_missing_ui_extra_when_flask_unavailable() -> None:
-    if importlib.util.find_spec("flask") is not None:
-        pytest.skip("Flask is installed in this environment.")
+def test_installed_ui_entrypoint_reports_missing_node_dependencies() -> None:
+    if (REPO_ROOT / "node_modules" / "next").exists():
+        pytest.skip("Next.js dependencies are installed in this environment.")
 
-    entrypoint = _installed_ui_entrypoint()
+    scripts_dir = Path(sys.executable).resolve().parent
+    entrypoint = scripts_dir / "monte-carlo-ui"
+    if not entrypoint.exists():
+        resolved = shutil.which("monte-carlo-ui")
+        if resolved is None:
+            raise AssertionError("Installed `monte-carlo-ui` entrypoint was not found on PATH.")
+        entrypoint = Path(resolved)
     completed = _run_entrypoint(entrypoint)
 
     assert completed.returncode == 2
     combined = f"{completed.stdout}\n{completed.stderr}"
-    assert "Install `python3 -m pip install -e .[ui]`" in combined
+    assert "Run `npm install` and `npm run dev`" in combined

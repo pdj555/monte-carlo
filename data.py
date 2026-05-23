@@ -279,10 +279,22 @@ def fetch_prices(
             try:
                 download_start = None if cache_file is not None else start
                 download_end = None if cache_file is not None else end
-                data = yf.download(
-                    ticker, start=download_start, end=download_end, progress=False
-                )
-                close = data.get("Close")
+                if download_start is None and download_end is None:
+                    raw = yf.download(
+                        ticker,
+                        period="max",
+                        progress=False,
+                        auto_adjust=True,
+                    )
+                else:
+                    raw = yf.download(
+                        ticker,
+                        start=download_start,
+                        end=download_end,
+                        progress=False,
+                        auto_adjust=True,
+                    )
+                close = raw.get("Close")
                 if close is None or close.empty:
                     raise PriceDataError(
                         f"No price data was returned for '{ticker}'. "

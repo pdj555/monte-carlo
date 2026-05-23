@@ -1,32 +1,18 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "installCommand": "pip install -r requirements.txt",
+  "framework": "nextjs",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
   "functions": {
-    "api/*.py": {
-      "maxDuration": 60,
-      "memory": 1024,
-      "includeFiles": "{sample_data/**,app.py,public_cli.py,simulate_cli.py,legacy_cli.py,cli_shared.py,simulation.py,analysis.py,backtest.py,data.py,decision.py,viz.py,ai.py,cli.py,MonteCarlo.py}",
-      "excludeFiles": "{.venv/**,.pytest_cache/**,__pycache__/**,**/__pycache__/**,*.egg-info/**,docs/**,tests/**,output/**,results/**,uv.lock,.agent/**,.github/**,.claude/**}"
+    "api/engine.py": {
+      "maxDuration": 60
     }
   },
-  "rewrites": [
-    { "source": "/((?!styles\\.css|robots\\.txt|favicon\\.ico).*)", "destination": "/api/index" }
-  ],
+  "env": {
+    "MPLBACKEND": "Agg"
+  },
   "headers": [
-    {
-      "source": "/styles.css",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400" },
-        { "key": "Content-Type", "value": "text/css; charset=utf-8" }
-      ]
-    },
-    {
-      "source": "/robots.txt",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400" }
-      ]
-    },
     {
       "source": "/(.*)",
       "headers": [

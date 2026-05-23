@@ -1,47 +1,85 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
-pytest.importorskip("flask")
-
-import data  # noqa: E402
-import app as web_app  # noqa: E402
+import data
+import ui_bridge
+import ui_state
 
 
 def test_build_public_argv_for_demo_simulate_uses_sample_data_and_seed() -> None:
-    argv = web_app.build_public_argv(web_app.UIRequest())
+    argv = ui_state.build_public_argv(ui_state.UIRequest())
 
     assert argv[:2] == ["simulate", "AAPL"]
     assert "--source" in argv
     assert "offline" in argv
-    assert str(web_app.SAMPLE_DATA_DIR) in argv
+    assert str(ui_state.SAMPLE_DATA_DIR) in argv
     assert "--seed" in argv
-    assert web_app.DEMO_SEED in argv
+    assert ui_state.DEMO_SEED in argv
     assert "--days" in argv
     assert "20" in argv
 
 
 def test_build_public_argv_for_demo_backtest_uses_short_window() -> None:
-    argv = web_app.build_public_argv(web_app.UIRequest(job="backtest"))
+    argv = ui_state.build_public_argv(ui_state.UIRequest(job="backtest"))
 
     for expected in ("--lookback", "5", "--hold", "3", "--rebalance", "3", "--top", "1"):
         assert expected in argv
 
 
+def test_build_public_argv_for_auto_uses_live_source_with_fallback_path() -> None:
+    argv = ui_state.build_public_argv(ui_state.UIRequest(source="auto"))
+
+    assert "--source" in argv
+    assert "auto" in argv
+    assert "--data-path" in argv
+    assert str(ui_state.SAMPLE_DATA_DIR) in argv
+
+
+def test_build_public_argv_for_online_uses_live_only() -> None:
+    argv = ui_state.build_public_argv(ui_state.UIRequest(source="online"))
+
+    assert argv.count("--source") == 1
+    assert "online" in argv
+    assert "--data-path" not in argv
+
+
+def test_build_public_argv_for_backtest_auto_uses_live_window() -> None:
+    argv = ui_state.build_public_argv(ui_state.UIRequest(job="backtest", source="auto"))
+
+    assert "--lookback" in argv
+    assert "60" in argv
+    assert "--scenarios" in argv
+    assert "100" in argv
+
+
+def test_build_public_argv_for_backtest_local_sample_uses_short_window() -> None:
+    argv = ui_state.build_public_argv(
+        ui_state.UIRequest(
+            job="backtest",
+            source="local",
+            data_path=str(ui_state.SAMPLE_DATA_DIR),
+        )
+    )
+
+    assert "--lookback" in argv
+    assert "5" in argv
+
+
 def test_validate_request_requires_existing_local_path(tmp_path: Path) -> None:
     missing = tmp_path / "missing"
-    request = web_app.UIRequest(source="local", data_path=str(missing))
+    request = ui_state.UIRequest(source="local", data_path=str(missing))
 
-    assert web_app.validate_request(request) == (
+    assert ui_state.validate_request(request) == (
         "That path was not found. Choose a CSV file or folder that exists."
     )
 
 
 def test_create_page_state_for_default_demo_returns_chart() -> None:
-    state = web_app.build_default_state()
+    state = ui_state.build_default_state()
 
     assert state.error is None
     assert state.request.source == "demo"
@@ -60,26 +98,27 @@ def test_create_page_state_live_first_handles_download_shape(monkeypatch) -> Non
         columns=columns,
     )
 
-    def _download(_ticker, start=None, end=None, progress=False):
+    def _download(_ticker, start=None, end=None, progress=False, **kwargs):
         assert progress is False
+        assert kwargs.get("period") == "max"
         return downloaded
 
     monkeypatch.setattr(data.yf, "download", _download)
 
-    state = web_app.create_page_state(web_app.UIRequest(source="auto"))
+    state = ui_state.create_page_state(ui_state.UIRequest(source="auto"))
 
     assert state.error is None
     assert state.chart_svg is not None
-    assert "Live prices weren’t available" not in state.summary
+    assert "Live prices weren't available" not in state.summary
     assert state.source_note == "Data source: live download."
 
 
 def test_create_page_state_local_sample_data_handles_multiple_tickers() -> None:
-    state = web_app.create_page_state(
-        web_app.UIRequest(
+    state = ui_state.create_page_state(
+        ui_state.UIRequest(
             source="local",
             tickers="AAPL MSFT",
-            data_path=str(web_app.SAMPLE_DATA_DIR),
+            data_path=str(ui_state.SAMPLE_DATA_DIR),
         )
     )
 
@@ -96,46 +135,44 @@ def test_create_page_state_auto_fallback_reports_bundled_sample(monkeypatch) -> 
 
     monkeypatch.setattr(data.yf, "download", _download)
 
-    state = web_app.create_page_state(web_app.UIRequest(source="auto"))
+    state = ui_state.create_page_state(ui_state.UIRequest(source="auto"))
 
     assert state.error is None
     assert state.source_note == "Data source: bundled sample data (fallback)."
 
 
-def test_flask_app_renders_default_demo() -> None:
-    client = web_app.app.test_client()
+def test_ui_bridge_serializes_default_state() -> None:
+    payload = ui_bridge.create_payload({"job": "simulate", "source": "demo"})
 
-    response = client.get("/")
-    body = response.get_data(as_text=True)
-
-    assert response.status_code == 200
-    assert "Simulate" in body
-    assert "Live" in body
-    assert "Details" in body
-    assert web_app.SOURCE_NOTES["auto"] in body
-    assert "<svg" in body
+    assert payload["request"]["job"] == "simulate"
+    assert payload["request"]["source"] == "demo"
+    assert payload["chartSvg"].startswith("<svg")
+    assert payload["metrics"]
+    assert payload["sourceNote"] == "Data source: bundled sample data."
 
 
-def test_flask_app_surfaces_local_path_guidance() -> None:
-    client = web_app.app.test_client()
+def test_ui_bridge_cli_returns_json(capsys, monkeypatch) -> None:
+    monkeypatch.setattr("sys.stdin.read", lambda: json.dumps({"source": "demo"}))
 
-    response = client.post("/", data={"job": "simulate", "source": "local", "tickers": "AAPL"})
-    body = response.get_data(as_text=True)
+    assert ui_bridge.main() == 0
+    payload = json.loads(capsys.readouterr().out)
 
-    assert response.status_code == 200
-    assert "Choose a CSV file or folder before running CSV." in body
-    assert "CSV file or folder" in body
+    assert payload["request"]["source"] == "demo"
+    assert payload["chartSvg"].startswith("<svg")
 
 
-def test_healthz_and_css_routes() -> None:
-    client = web_app.app.test_client()
+def test_next_ui_files_present_the_public_surface() -> None:
+    package_json = json.loads(Path("package.json").read_text(encoding="utf-8"))
+    page = Path("app/page.tsx").read_text(encoding="utf-8")
+    workbench = Path("components/workbench/workbench.tsx").read_text(encoding="utf-8")
+    bridge = Path("lib/python-bridge.ts").read_text(encoding="utf-8")
+    route = Path("app/api/run/route.ts").read_text(encoding="utf-8")
 
-    health = client.get("/healthz")
-    css = client.get("/styles.css")
-    favicon = client.get("/favicon.ico")
-
-    assert health.status_code == 200
-    assert health.get_data(as_text=True) == "ok"
-    assert css.status_code == 200
-    assert ".masthead" in css.get_data(as_text=True)
-    assert favicon.status_code == 204
+    assert package_json["dependencies"]["next"].startswith("16.")
+    assert "Workbench" in page
+    assert 'source: "auto"' in page
+    assert "RunResults" in workbench
+    assert 'source: "auto"' in page
+    assert 'runtime = "nodejs"' in route
+    assert "runViaVercelEngine" in bridge
+    assert Path("api/engine.py").exists()
