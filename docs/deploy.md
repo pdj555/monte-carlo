@@ -2,20 +2,15 @@
 
 ## Vercel
 
-The browser UI is configured for Vercel's Python/Flask runtime. Vercel detects
-`app.py` as the WSGI entrypoint because it exports a top-level `app` object,
-installs runtime dependencies from `requirements.txt`, and reads the Python
-version from `.python-version`.
-
-The deployment config intentionally avoids legacy `builds` and uses the modern
-`functions` block in `vercel.json` to keep the Python bundle lean while still
-including `sample_data/**` for the instant demo.
+The browser workbench is a Next.js App Router application. The UI calls
+`/api/run`, which runs the same Python decision engine through `ui_bridge.py`.
 
 Local preview:
 
 ```bash
-python3 -m pip install -r requirements-ui.txt
-vercel dev
+python3 -m pip install -e .
+npm install
+npm run dev
 ```
 
 Production deploy:
@@ -26,21 +21,19 @@ vercel deploy --prod
 
 Operational notes:
 
-- `Demo sample` is the safest public default because it is deterministic and
-  does not depend on live market-data availability.
-- `Try live data` can be slower because it calls Yahoo Finance through
-  `yfinance`; if the upstream request fails, the app falls back to bundled CSVs.
-- Local CSV paths only make sense on machines that have those files. On Vercel,
-  use the bundled demo data unless you add CSV files to the repository.
-- The function timeout is capped in `vercel.json`; keep browser runs small and
-  move larger backtests to the CLI.
+- `Live` downloads Yahoo Finance prices through `yfinance`. When that fails, the
+  engine falls back to bundled CSVs under `sample_data/`.
+- `Live only` requires a successful download and never falls back.
+- `Sample` is deterministic and offline — use it for CI and demos without network.
+- `CSV` paths are local to the machine running the Node server. On Vercel, use
+  bundled sample data unless you add CSV files to the deployment bundle.
+- Browser runs should stay small. Use the CLI for large scenario counts and
+  longer backtests.
+- `vercel.json` installs both npm and Python dependencies because the Next.js
+  route delegates computation to the Python engine.
 
-## Fly.io
+## Local Launcher
 
-If you want to experiment with a long-running container host instead of
-serverless Flask:
-
-```bash
-fly launch --no-deploy
-fly deploy
-```
+`monte-carlo-ui` is a convenience launcher. It expects `npm install` to have
+already created `node_modules/`; otherwise it prints the setup command and
+exits without starting a server.
