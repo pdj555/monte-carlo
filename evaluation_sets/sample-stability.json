@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "name": "sample-stability",
+  "days": 5,
+  "scenarios": 100,
+  "universes": [
+    {
+      "name": "large-cap-tech",
+      "tickers": ["AAPL", "MSFT"]
+    }
+  ],
+  "models": ["historical", "gbm"],
+  "seeds": [7, 42, 99],
+  "sources": [
+    {
+      "name": "bundled",
+      "mode": "offline",
+      "data_path": "../sample_data"
+    }
+  ]
+}
