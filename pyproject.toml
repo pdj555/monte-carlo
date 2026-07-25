@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["flake8", "pytest"]
+dev = ["flake8", "pytest", "setuptools>=69", "wheel"]
 ui = []
 
 [project.scripts]
