@@ -116,6 +116,7 @@ def test_load_evaluation_set_resolves_paths_and_expands_in_manifest_order(tmp_pa
         (lambda data: data.update({"unexpected": True}), "unexpected"),
         (lambda data: data.pop("schema_version"), "schema_version"),
         (lambda data: data.update({"schema_version": 2}), "schema_version"),
+        (lambda data: data.update({"schema_version": 1.0}), "schema_version"),
         (lambda data: data.update({"models": ["historical", "historical"]}), "models"),
         (lambda data: data.update({"universes": []}), "universes"),
         (lambda data: data["universes"][0].update({"tickers": []}), "tickers"),

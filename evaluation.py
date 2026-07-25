@@ -262,7 +262,11 @@ def load_evaluation_set(path: str | Path) -> EvaluationSet:
         "manifest",
     )
     schema_version = _required(top_level, "schema_version", "schema_version")
-    if isinstance(schema_version, bool) or schema_version != EVALUATION_SCHEMA_VERSION:
+    if (
+        isinstance(schema_version, bool)
+        or not isinstance(schema_version, int)
+        or schema_version != EVALUATION_SCHEMA_VERSION
+    ):
         _config_error(
             "schema_version",
             f"must be {EVALUATION_SCHEMA_VERSION}",
