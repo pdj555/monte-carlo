@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["flake8", "pytest"]
+dev = ["flake8", "pytest", "setuptools>=69", "wheel"]
 ui = []
 
 [project.scripts]
@@ -27,4 +27,4 @@ monte-carlo = "public_cli:main"
 monte-carlo-ui = "web_entrypoint:main"
 
 [tool.setuptools]
-py-modules = ["analysis", "ai", "backtest", "cli", "cli_shared", "data", "decision", "legacy_cli", "public_cli", "simulate_cli", "simulation", "ui_bridge", "ui_state", "viz", "web_entrypoint"]
+py-modules = ["analysis", "ai", "backtest", "cli", "cli_shared", "data", "decision", "evaluation", "legacy_cli", "public_cli", "simulate_cli", "simulation", "ui_bridge", "ui_state", "viz", "web_entrypoint"]

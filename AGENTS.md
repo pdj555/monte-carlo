@@ -9,7 +9,9 @@
 - `ui_state.py`: presentation state builder shared by the browser bridge.
 - `ui_bridge.py`: JSON bridge used by the Next.js API route.
 - `web_entrypoint.py`: local `monte-carlo-ui` launcher for the Next.js workbench.
-- `public_cli.py`: public CLI implementation for `monte-carlo simulate|backtest`.
+- `public_cli.py`: public CLI implementation for `monte-carlo simulate|backtest|evaluate`.
+- `evaluation.py`: versioned scenario-evaluation contracts and scorecard aggregation.
+- `evaluation_sets/`: versioned, bounded scenario manifests for offline evaluation.
 - `simulate_cli.py`: shared simulation workflow used by public and legacy entrypoints.
 - `cli_shared.py`: shared parser and rendering helpers for CLI surfaces.
 - `backtest.py`: walk-forward engine plus deprecated backtest wrapper.

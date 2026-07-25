@@ -16,6 +16,7 @@ import cli as cli_module  # noqa: E402
 import data  # noqa: E402
 import MonteCarlo  # noqa: E402
 import simulate_cli  # noqa: E402
+from evaluation import EvaluationReport, EvaluationScorecard  # noqa: E402
 from cli import legacy_main, parse_args, run  # noqa: E402
 from public_cli import (  # noqa: E402
     main,
@@ -36,6 +37,76 @@ def test_public_parse_args_defaults_to_aapl():
     args = parse_public_args(["simulate"])
     assert args.command == "simulate"
     assert args.tickers == ["AAPL"]
+
+
+def test_public_parser_accepts_evaluation_set_and_output():
+    args = parse_public_args(
+        ["evaluate", "evaluation_sets/sample-stability.json", "--output", "results/eval"]
+    )
+
+    assert args.command == "evaluate"
+    assert args.set_file == "evaluation_sets/sample-stability.json"
+    assert args.output == "results/eval"
+
+
+def test_public_evaluate_runs_reference_set_and_writes_auditable_outputs(tmp_path, capsys):
+    output = tmp_path / "evaluation"
+
+    exit_code = main(
+        [
+            "evaluate",
+            "evaluation_sets/sample-stability.json",
+            "--output",
+            str(output),
+        ]
+    )
+
+    rendered = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Evaluation set: sample-stability" in rendered
+    assert "Runs: 6/6 complete (100.0%)" in rendered
+    assert {path.name for path in output.iterdir()} == {
+        "scorecard.md",
+        "runs.csv",
+        "report.json",
+    }
+
+
+def test_public_evaluate_returns_one_when_scorecard_has_failed_runs(monkeypatch):
+    failed_report = object.__new__(EvaluationReport)
+    object.__setattr__(
+        failed_report,
+        "scorecard",
+        EvaluationScorecard(
+            total_runs=1,
+            completed_runs=0,
+            failed_runs=1,
+            run_success_rate=0.0,
+            ticker_success_rate=0.0,
+            mean_rank_correlation=None,
+            top_pick_consistency=None,
+            guardrail_rejection_rate=0.0,
+            no_trade_rate=0.0,
+            worst_var_95_pct=None,
+            source_reliability={},
+        ),
+    )
+    monkeypatch.setattr("public_cli.run_public_evaluate", lambda _args: failed_report)
+
+    assert main(["evaluate", "set.json"]) == 1
+
+
+def test_public_evaluate_returns_actionable_error_for_malformed_manifest(
+    tmp_path, caplog
+):
+    set_file = tmp_path / "malformed.json"
+    set_file.write_text("{", encoding="utf-8")
+
+    with caplog.at_level(logging.ERROR, logger="public_cli"):
+        exit_code = main(["evaluate", str(set_file)])
+
+    assert exit_code == 2
+    assert "invalid JSON" in caplog.text
 
 
 def test_public_main_without_subcommand_prints_help_hint(capsys):

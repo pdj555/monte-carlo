@@ -13,6 +13,14 @@ import pandas as pd
 
 import backtest as backtest_cli
 from data import PriceDataError
+from evaluation import (
+    EvaluationReport,
+    EvaluationRun,
+    evaluate_scenario_set,
+    format_evaluation_scorecard,
+    load_evaluation_set,
+    save_evaluation_report,
+)
 from cli_shared import (
     IntentionalDefaultsHelpFormatter,
     non_negative_int,
@@ -198,6 +206,21 @@ def build_public_parser() -> argparse.ArgumentParser:
         help="Print tables and secondary metrics.",
     )
 
+    evaluate_parser = subparsers.add_parser(
+        "evaluate",
+        help="Test decision stability across a reproducible scenario set.",
+        formatter_class=IntentionalDefaultsHelpFormatter,
+    )
+    evaluate_parser.add_argument(
+        "set_file",
+        help="Versioned JSON evaluation-set file.",
+    )
+    evaluate_parser.add_argument(
+        "--output",
+        default=None,
+        help="Directory for scorecard.md, runs.csv, and report.json.",
+    )
+
     return parser
 
 
@@ -206,7 +229,7 @@ def _parse_public_args_with_parser(
 ) -> tuple[argparse.ArgumentParser, argparse.Namespace]:
     parser = build_public_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
-    if getattr(args, "command", None) and not args.tickers:
+    if getattr(args, "command", None) in {"simulate", "backtest"} and not args.tickers:
         args.tickers = ["AAPL"]
     return parser, args
 
@@ -532,6 +555,32 @@ def execute_public_backtest(args: argparse.Namespace) -> dict[str, object]:
     return backtest_cli.run(legacy_args, render=False)
 
 
+def _execute_evaluation_run(run: EvaluationRun) -> dict[str, Any]:
+    """Adapt one evaluation matrix cell to the public simulation interface."""
+
+    return execute_public_simulate(
+        argparse.Namespace(
+            tickers=list(run.tickers),
+            days=run.days,
+            scenarios=run.scenarios,
+            model=run.model,
+            seed=run.seed,
+            source=run.source_mode,
+            data_path=str(run.data_path) if run.data_path is not None else None,
+            output=None,
+            show=False,
+            details=False,
+        )
+    )
+
+
+def execute_public_evaluate(args: argparse.Namespace) -> EvaluationReport:
+    """Execute an evaluation set without rendering text output."""
+
+    evaluation_set = load_evaluation_set(args.set_file)
+    return evaluate_scenario_set(evaluation_set, _execute_evaluation_run)
+
+
 def run_public_simulate(args: argparse.Namespace) -> dict[str, Any]:
     """Execute the simplified simulate command."""
 
@@ -558,13 +607,26 @@ def run_public_backtest(args: argparse.Namespace) -> dict[str, object]:
     return result
 
 
+def run_public_evaluate(args: argparse.Namespace) -> EvaluationReport:
+    """Execute and render a reproducible decision-stability evaluation."""
+
+    report = execute_public_evaluate(args)
+    print(format_evaluation_scorecard(report))
+    if args.output:
+        save_evaluation_report(report, args.output)
+    return report
+
+
 def main(argv: Optional[Iterable[str]] = None) -> int:
     """Entrypoint for the public ``monte-carlo`` command."""
 
     parser, args = _parse_public_args_with_parser(argv)
     if args.command is None:
         parser.print_help()
-        print("\nChoose `simulate` for current ideas or `backtest` for historical validation.")
+        print(
+            "\nChoose `simulate` for current ideas, `backtest` for historical "
+            "validation, or `evaluate` for decision stability."
+        )
         return 1
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
@@ -578,8 +640,15 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         if args.command == "backtest":
             run_public_backtest(args)
             return 0
+        if args.command == "evaluate":
+            report = run_public_evaluate(args)
+            return 1 if report.scorecard.failed_runs > 0 else 0
     except Exception as exc:
         _log_public_error(exc, command=str(args.command), args=args)
         return 2
 
     return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

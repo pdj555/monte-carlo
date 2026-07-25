@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from evaluation import expand_evaluation_runs, load_evaluation_set
 from public_cli import main as public_main
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,12 @@ def test_contributor_guides_describe_public_cli_split() -> None:
     for path in ("AGENTS.md",):
         text = Path(path).read_text(encoding="utf-8")
         assert "public_cli.py" in text
+
+
+def test_contributor_guides_name_evaluation_contract_and_reference_sets() -> None:
+    text = Path("AGENTS.md").read_text(encoding="utf-8")
+    assert "evaluation.py" in text
+    assert "evaluation_sets/" in text
 
 
 def test_improvements_doc_avoids_retired_command_examples() -> None:
@@ -59,6 +66,15 @@ def test_readme_links_output_guide_and_stays_operator_focused() -> None:
     assert "monte-carlo backtest" in text
 
 
+def test_readme_documents_evaluation_gate_before_capital_is_risked() -> None:
+    text = README_PATH.read_text(encoding="utf-8")
+    assert (
+        "monte-carlo evaluate evaluation_sets/sample-stability.json "
+        "--output results/evaluation"
+    ) in text
+    assert "before capital is risked" in text
+
+
 def test_output_guide_names_key_saved_artifacts() -> None:
     text = OUTPUT_GUIDE_PATH.read_text(encoding="utf-8")
     for artifact in (
@@ -76,6 +92,22 @@ def test_output_guide_names_key_saved_artifacts() -> None:
         assert artifact in text
     assert "execution_plan.csv" not in text
     assert "simulations.csv.gz" not in text
+
+
+def test_output_guide_explains_evaluation_artifacts() -> None:
+    text = OUTPUT_GUIDE_PATH.read_text(encoding="utf-8")
+    assert "scorecard.md" in text
+    assert "runs.csv" in text
+    assert "manifest hash" in text
+    assert "normalized matrix" in text
+    assert "source reliability" in text
+
+
+def test_reference_evaluation_set_expands_to_bundled_sample_data() -> None:
+    evaluation_set = load_evaluation_set("evaluation_sets/sample-stability.json")
+
+    assert len(expand_evaluation_runs(evaluation_set)) == 6
+    assert evaluation_set.sources[0].data_path == (REPO_ROOT / "sample_data").resolve()
 
 
 def test_readme_offline_examples_run(capsys) -> None:

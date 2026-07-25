@@ -56,6 +56,21 @@ Open these first:
 - `price_sources.json` records where the history came from so live, offline,
   and fallback runs stay auditable after the terminal closes.
 
+## Evaluate
+
+Example folder:
+
+```text
+results/evaluation/
+  scorecard.md
+  runs.csv
+  report.json
+```
+
+Open `scorecard.md` first. Use `runs.csv` to isolate unstable or failed matrix
+cells. `report.json` preserves the manifest hash, normalized matrix, outcomes,
+and source reliability for later audit.
+
 ## Good Handoff
 
 - Send `action_plan.md` or `backtest_summary.csv` when someone only needs the
