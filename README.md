@@ -40,6 +40,9 @@ monte-carlo evaluate evaluation_sets/sample-stability.json --output results/eval
 ```
 
 Use `evaluate` to gate a decision across seeds and models before capital is risked.
+The reference manifest and `sample_data/` are source-checkout assets and are not included
+in the installed wheel. Wheel users must supply their own evaluation-set JSON and local
+data paths.
 
 ## Architecture
 

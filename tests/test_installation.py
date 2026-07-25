@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -113,6 +114,76 @@ def test_installed_entrypoint_runs_offline_simulate_and_backtest() -> None:
     assert backtest.returncode == 0, backtest.stderr
     assert "Strategy return:" in backtest.stdout
     assert "Backtest summary" in backtest.stdout
+
+
+def test_built_wheel_keeps_reference_assets_source_checkout_only(tmp_path) -> None:
+    wheel_dir = tmp_path / "dist"
+    wheel_dir.mkdir()
+    built = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            str(REPO_ROOT),
+            "--no-deps",
+            "--no-build-isolation",
+            "--wheel-dir",
+            str(wheel_dir),
+        ],
+        capture_output=True,
+        check=False,
+        cwd=tmp_path,
+        text=True,
+    )
+    assert built.returncode == 0, built.stderr
+    wheel_path = next(wheel_dir.glob("*.whl"))
+    with zipfile.ZipFile(wheel_path) as wheel:
+        packaged_paths = set(wheel.namelist())
+    assert "evaluation.py" in packaged_paths
+    assert not any(path.startswith("evaluation_sets/") for path in packaged_paths)
+    assert not any(path.startswith("sample_data/") for path in packaged_paths)
+
+    installed_dir = tmp_path / "site"
+    installed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-deps",
+            "--target",
+            str(installed_dir),
+            str(wheel_path),
+        ],
+        capture_output=True,
+        check=False,
+        cwd=tmp_path,
+        text=True,
+    )
+    assert installed.returncode == 0, installed.stderr
+    evaluated = subprocess.run(
+        [
+            sys.executable,
+            str(installed_dir / "public_cli.py"),
+            "evaluate",
+            "evaluation_sets/sample-stability.json",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=tmp_path,
+        env={**os.environ, "MPLBACKEND": "Agg"},
+        text=True,
+    )
+    assert evaluated.returncode == 2
+    assert "cannot read" in f"{evaluated.stdout}\n{evaluated.stderr}"
+
+    readme = " ".join(
+        (REPO_ROOT / "README.md").read_text(encoding="utf-8").lower().split()
+    )
+    assert "source-checkout assets" in readme
+    assert "not included in the installed wheel" in readme
+    assert "supply their own evaluation-set json and local data paths" in readme
 
 
 def test_pyproject_console_script_points_to_public_cli() -> None:

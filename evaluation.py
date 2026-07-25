@@ -11,6 +11,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from types import MappingProxyType
 from typing import Callable, Mapping
 
 
@@ -20,6 +21,7 @@ SUPPORTED_MODELS = ("historical", "gbm")
 SUPPORTED_SOURCE_MODES = ("auto", "offline", "online")
 
 _TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.^=-]{0,14}$")
+_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
 class EvaluationConfigError(ValueError):
@@ -167,7 +169,10 @@ class EvaluationScorecard:
             "guardrail_rejection_rate": self.guardrail_rejection_rate,
             "no_trade_rate": self.no_trade_rate,
             "worst_var_95_pct": self.worst_var_95_pct,
-            "source_reliability": self.source_reliability,
+            "source_reliability": {
+                name: dict(reliability)
+                for name, reliability in self.source_reliability.items()
+            },
         }
 
 
@@ -219,6 +224,17 @@ def _positive_int(value: object, field: str) -> int:
     return value
 
 
+def _safe_name(value: object, field: str) -> str:
+    name = _nonempty_string(value, field)
+    if not _NAME_PATTERN.fullmatch(name):
+        _config_error(
+            field,
+            "must be a safe token",
+            "Use 1-64 letters, digits, periods, underscores, or hyphens with no slashes",
+        )
+    return name
+
+
 def _required(mapping: Mapping[str, object], key: str, field: str) -> object:
     if key not in mapping:
         _config_error(field, "is required", "Provide this field")
@@ -242,7 +258,7 @@ def load_evaluation_set(path: str | Path) -> EvaluationSet:
         ) from exc
     try:
         document = json.loads(manifest_bytes)
-    except (TypeError, json.JSONDecodeError) as exc:
+    except (TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise EvaluationConfigError(
             "manifest: invalid JSON. Provide a valid JSON evaluation manifest"
         ) from exc
@@ -286,7 +302,7 @@ def load_evaluation_set(path: str | Path) -> EvaluationSet:
     for index, raw_universe in enumerate(raw_universes):
         field = f"universes[{index}]"
         universe = _strict_keys(raw_universe, {"name", "tickers"}, field)
-        universe_name = _nonempty_string(
+        universe_name = _safe_name(
             _required(universe, "name", f"{field}.name"), f"{field}.name"
         )
         raw_tickers = _required(universe, "tickers", f"{field}.tickers")
@@ -345,7 +361,9 @@ def load_evaluation_set(path: str | Path) -> EvaluationSet:
     for index, raw_source in enumerate(raw_sources):
         field = f"sources[{index}]"
         source = _strict_keys(raw_source, {"name", "mode", "data_path"}, field)
-        source_name = _nonempty_string(_required(source, "name", f"{field}.name"), f"{field}.name")
+        source_name = _safe_name(
+            _required(source, "name", f"{field}.name"), f"{field}.name"
+        )
         source_mode = _nonempty_string(_required(source, "mode", f"{field}.mode"), f"{field}.mode")
         if source_mode not in SUPPORTED_SOURCE_MODES:
             _config_error(
@@ -519,7 +537,8 @@ def _normalise_outcome(run: EvaluationRun, result: Mapping[str, object]) -> Eval
 
 
 def _rank_correlation(left: tuple[str, ...], right: tuple[str, ...]) -> float | None:
-    common = [ticker for ticker in left if ticker in set(right)]
+    right_set = set(right)
+    common = [ticker for ticker in left if ticker in right_set]
     if len(common) < 2:
         return None
     left_positions = {ticker: index + 1 for index, ticker in enumerate(left)}
@@ -593,12 +612,17 @@ def _scorecard(outcomes: tuple[EvaluationRunOutcome, ...]) -> EvaluationScorecar
             guardrails / completed_tickers if completed_tickers else 0.0
         ),
         no_trade_rate=(
-            sum(outcome.stance == "NO_TRADE" for outcome in completed) / completed_runs
+            sum(outcome.top_pick is None for outcome in completed) / completed_runs
             if completed_runs
             else 0.0
         ),
         worst_var_95_pct=max(downside_values) if downside_values else None,
-        source_reliability=source_reliability,
+        source_reliability=MappingProxyType(
+            {
+                name: MappingProxyType(dict(reliability))
+                for name, reliability in source_reliability.items()
+            }
+        ),
     )
 
 

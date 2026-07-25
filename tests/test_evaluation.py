@@ -8,6 +8,7 @@ import pytest
 
 from evaluation import (
     EvaluationConfigError,
+    _rank_correlation,
     evaluate_scenario_set,
     expand_evaluation_runs,
     format_evaluation_scorecard,
@@ -146,6 +147,41 @@ def test_load_evaluation_set_rejects_invalid_manifests(tmp_path, mutate, field):
     assert any(word in message for word in ("Provide", "Use", "Remove", "Reduce"))
 
 
+def test_load_evaluation_set_rejects_names_that_can_collide_in_run_ids(tmp_path):
+    payload = base_set()
+    payload["universes"] = [
+        {"name": "core", "tickers": ["AAPL"]},
+        {"name": "core/historical/seed-7/bundled", "tickers": ["MSFT"]},
+    ]
+    payload["seeds"] = [7]
+    payload["sources"] = [
+        {
+            "name": "bundled/historical/seed-7/local",
+            "mode": "offline",
+            "data_path": "prices",
+        },
+        {"name": "local", "mode": "offline", "data_path": "prices"},
+    ]
+
+    with pytest.raises(EvaluationConfigError) as exc:
+        load_evaluation_set(write_set(tmp_path, payload))
+
+    assert "name" in str(exc.value)
+    assert "safe token" in str(exc.value)
+
+
+def test_load_evaluation_set_normalizes_non_utf_manifest_errors(tmp_path):
+    path = tmp_path / "evaluation.json"
+    path.write_bytes(b'{"schema_version": 1, "name": "\xff"}')
+
+    with pytest.raises(EvaluationConfigError) as exc:
+        load_evaluation_set(path)
+
+    assert str(exc.value) == (
+        "manifest: invalid JSON. Provide a valid JSON evaluation manifest"
+    )
+
+
 def test_evaluate_scenario_set_reports_stability_reliability_and_downside(tmp_path):
     evaluation_set = load_evaluation_set(write_two_seed_set(tmp_path))
 
@@ -177,6 +213,66 @@ def test_evaluate_scenario_set_reports_stability_reliability_and_downside(tmp_pa
     assert report.scorecard.guardrail_rejection_rate == pytest.approx(0.25)
     assert report.scorecard.no_trade_rate == pytest.approx(0.0)
     assert report.scorecard.worst_var_95_pct == pytest.approx(0.20)
+    assert report.scorecard.source_reliability["bundled"]["completed_runs"] == 2
+
+
+def test_evaluation_counts_defensive_hold_cash_as_no_trade(tmp_path):
+    payload = base_set()
+    payload["seeds"] = [7]
+    evaluation_set = load_evaluation_set(write_set(tmp_path, payload))
+
+    report = evaluate_scenario_set(
+        evaluation_set,
+        lambda run: simulation_result(
+            rankings=[
+                ("AAPL", -1.0, "AVOID", "expected_return<0.0%", 0.08),
+                ("MSFT", -2.0, "AVOID", "expected_return<0.0%", 0.14),
+            ],
+            top_pick=None,
+            stance="DEFENSIVE",
+        ),
+    )
+
+    assert report.outcomes[0].status == "completed"
+    assert report.outcomes[0].top_pick is None
+    assert report.scorecard.no_trade_rate == pytest.approx(1.0)
+
+
+def test_rank_correlation_hashes_a_large_right_universe_once():
+    class CountingTicker(str):
+        hash_calls = 0
+
+        def __hash__(self):
+            type(self).hash_calls += 1
+            return super().__hash__()
+
+    left = tuple(CountingTicker(f"T{index:03}") for index in range(250))
+    right = tuple(reversed(left))
+
+    correlation = _rank_correlation(left, right)
+
+    assert correlation == pytest.approx(-1.0)
+    assert CountingTicker.hash_calls < 5_000
+
+
+def test_scorecard_source_reliability_is_recursively_immutable(tmp_path):
+    evaluation_set = load_evaluation_set(write_two_seed_set(tmp_path))
+    report = evaluate_scenario_set(
+        evaluation_set,
+        lambda run: simulation_result(
+            rankings=[("AAPL", 1.0, "BUY", "", 0.08)],
+            top_pick="AAPL",
+            stance="SELECTIVE",
+        ),
+    )
+
+    with pytest.raises(TypeError):
+        report.scorecard.source_reliability["new"] = {}
+    with pytest.raises(TypeError):
+        report.scorecard.source_reliability["bundled"]["completed_runs"] = 0
+
+    serialized = report.scorecard.to_dict()
+    serialized["source_reliability"]["bundled"]["completed_runs"] = 0
     assert report.scorecard.source_reliability["bundled"]["completed_runs"] == 2
 
 
