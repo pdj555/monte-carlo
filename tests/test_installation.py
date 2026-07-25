@@ -46,6 +46,7 @@ def test_installed_entrypoint_serves_help_commands() -> None:
         ["--help"],
         ["simulate", "--help"],
         ["backtest", "--help"],
+        ["evaluate", "--help"],
     ):
         completed = _run_entrypoint(entrypoint, *args)
         assert completed.returncode == 0, completed.stderr
@@ -59,6 +60,7 @@ def test_installed_entrypoint_without_subcommand_prints_help_hint() -> None:
     assert completed.returncode == 1, completed.stderr
     assert "simulate" in completed.stdout
     assert "backtest" in completed.stdout
+    assert "evaluate" in completed.stdout
     assert "Choose `simulate` for current ideas" in completed.stdout
 
 

@@ -34,7 +34,12 @@ monte-carlo backtest AAPL MSFT --lookback 60 --hold 20 --rebalance 20
 
 # Offline fixtures
 monte-carlo simulate AAPL --source offline --data-path sample_data
+
+# Decision-stability gate before capital is risked
+monte-carlo evaluate evaluation_sets/sample-stability.json --output results/evaluation
 ```
+
+Use `evaluate` to gate a decision across seeds and models before capital is risked.
 
 ## Architecture
 
