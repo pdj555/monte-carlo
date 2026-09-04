@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
+import { isWorkbenchPayload } from "./payload-validation";
 import type { WorkbenchPayload, WorkbenchRequest } from "./types";
 import { DEFAULT_REQUEST } from "./types";
 
@@ -104,6 +105,23 @@ function engineFailure(
   };
 }
 
+function parseEnginePayload(
+  request: WorkbenchRequest,
+  text: string,
+): WorkbenchPayload {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    return engineFailure(request, "Python returned invalid JSON.", text);
+  }
+
+  if (!isWorkbenchPayload(payload)) {
+    return engineFailure(request, "Python returned an invalid response.", text);
+  }
+  return payload;
+}
+
 function resolveEngineUrl(origin?: string): string {
   if (origin) {
     return new URL(VERCEL_ENGINE_PATH, origin).toString();
@@ -147,11 +165,7 @@ async function runViaVercelEngine(
     );
   }
 
-  try {
-    return JSON.parse(text) as WorkbenchPayload;
-  } catch {
-    return engineFailure(request, "Python returned invalid JSON.", text);
-  }
+  return parseEnginePayload(request, text);
 }
 
 async function runViaLocalSpawn(request: WorkbenchRequest): Promise<WorkbenchPayload> {
@@ -211,15 +225,10 @@ async function runViaLocalSpawn(request: WorkbenchRequest): Promise<WorkbenchPay
     return engineFailure(request, message, stderrText || stdoutText || fallbackPayload.detailsText);
   }
 
-  try {
-    return JSON.parse(stdoutText) as WorkbenchPayload;
-  } catch {
-    return engineFailure(
-      request,
-      "Python returned invalid JSON.",
-      stdoutText || stderrText || fallbackPayload.detailsText,
-    );
-  }
+  return parseEnginePayload(
+    request,
+    stdoutText || stderrText || fallbackPayload.detailsText,
+  );
 }
 
 export async function runWorkbench(
