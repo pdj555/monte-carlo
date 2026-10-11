@@ -1,6 +1,6 @@
 # Monte Carlo
 
-Monte Carlo simulation and walk-forward validation. Next.js workbench over a Python engine with auditable price provenance.
+Monte Carlo simulation and walk-forward validation for portfolio decisions. A Python engine with auditable price provenance, exposed through a CLI and a Next.js workbench. Built for one job: decide whether a strategy deserves capital, with evidence.
 
 ```mermaid
 flowchart LR
@@ -13,7 +13,7 @@ flowchart LR
   F --> G
 ```
 
-## Start
+## Quickstart
 
 ```bash
 python3 -m pip install -e .
@@ -39,10 +39,14 @@ monte-carlo simulate AAPL --source offline --data-path sample_data
 monte-carlo evaluate evaluation_sets/sample-stability.json --output results/evaluation
 ```
 
-Use `evaluate` to gate a decision across seeds and models before capital is risked.
-The reference manifest and `sample_data/` are source-checkout assets and are not included
-in the installed wheel. Wheel users must supply their own evaluation-set JSON and local
-data paths.
+`evaluate` gates a decision across seeds and models before capital is risked. The reference manifest and `sample_data/` are source-checkout assets and are not included in the installed wheel. Wheel users must supply their own evaluation-set JSON and local data paths.
+
+## What it does
+
+- **Simulation.** Multi-asset Monte Carlo with configurable scenarios, horizons, and seeds. Ranked output with guardrails before any allocation.
+- **Walk-forward backtesting.** Lookback, hold, and rebalance windows. No lookahead bias: parameters fit only on data the strategy could have seen.
+- **Decision stability.** The `evaluate` command runs a candidate decision across seeds and model variants and reports whether the conclusion holds. Unstable decisions fail the gate.
+- **Auditable provenance.** Every price input carries its source. `auto`, `offline`, or `online`. Local CSVs need `Date` and `Close`. Fixtures live in `sample_data/`.
 
 ## Architecture
 
@@ -54,11 +58,9 @@ data paths.
 | `ui_bridge.py` | JSON bridge for the API route |
 | `ui_state.py` | Presentation state builder |
 
-**Data sources:** `auto`, `offline`, `online`. Local CSVs need `Date` and `Close`; fixtures live in `sample_data/`.
-
 **Deploy:** Vercel-ready. See [docs/deploy.md](docs/deploy.md).
 
-**Test:**
+## Test
 
 ```bash
 pytest -q
