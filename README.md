@@ -43,10 +43,10 @@ monte-carlo evaluate evaluation_sets/sample-stability.json --output results/eval
 
 ## What it does
 
-- **Simulation.** Multi-asset Monte Carlo with configurable scenarios, horizons, and seeds. Ranked output with guardrails before any allocation.
-- **Walk-forward backtesting.** Lookback, hold, and rebalance windows. No lookahead bias: parameters fit only on data the strategy could have seen.
-- **Decision stability.** The `evaluate` command runs a candidate decision across seeds and model variants and reports whether the conclusion holds. Unstable decisions fail the gate.
-- **Auditable provenance.** Every price input carries its source. `auto`, `offline`, or `online`. Local CSVs need `Date` and `Close`. Fixtures live in `sample_data/`.
+- Simulation. Multi-asset Monte Carlo with configurable scenarios, horizons, and seeds. Ranked output with guardrails before any allocation.
+- Walk-forward backtesting. Lookback, hold, and rebalance windows. No lookahead bias: parameters fit only on data the strategy could have seen.
+- Decision stability. The `evaluate` command runs a candidate decision across seeds and model variants and reports whether the conclusion holds. Unstable decisions fail the gate.
+- Auditable provenance. Every price input carries its source. `auto`, `offline`, or `online`. Local CSVs need `Date` and `Close`. Fixtures live in `sample_data/`.
 
 ## Architecture
 
@@ -58,7 +58,7 @@ monte-carlo evaluate evaluation_sets/sample-stability.json --output results/eval
 | `ui_bridge.py` | JSON bridge for the API route |
 | `ui_state.py` | Presentation state builder |
 
-**Deploy:** Vercel-ready. See [docs/deploy.md](docs/deploy.md).
+Deploy: Vercel-ready. See [docs/deploy.md](docs/deploy.md).
 
 ## Test
 
