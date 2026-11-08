@@ -177,6 +177,23 @@ def _max_drawdown(equity: pd.Series) -> float:
     return float(drawdown.max())
 
 
+def _excess_return_t_stat(rebalance_log: pd.DataFrame) -> float:
+    """t-statistic of the per-period return over equal weight; NaN below two periods.
+
+    The periods do not overlap, so they are treated as independent draws. Near 0
+    means the walk-forward edge is indistinguishable from noise; about 2 is the
+    usual bar before reading anything into it, and more when many configurations
+    were tried.
+    """
+    excess = rebalance_log["strategy_return_net"] - rebalance_log["equal_weight_return"]
+    if len(excess) < 2:
+        return float("nan")
+    spread = float(excess.std(ddof=1))
+    if spread == 0.0:
+        return float("nan")
+    return float(excess.mean() / (spread / len(excess) ** 0.5))
+
+
 def summarize_backtest(
     *,
     equity_curve: pd.DataFrame,
@@ -207,6 +224,7 @@ def summarize_backtest(
         "cash_total_return": cash_final - 1.0,
         "excess_return_vs_equal_weight": (strategy_final - 1.0) - (equal_weight_final - 1.0),
         "excess_return_vs_cash": (strategy_final - 1.0) - (cash_final - 1.0),
+        "excess_return_t_stat": _excess_return_t_stat(rebalance_log),
     }
     return pd.Series(summary)
 
@@ -234,12 +252,26 @@ def run_walk_forward_backtest(
     transaction_cost_bps: float = 0.0,
     annual_cash_yield: float = 0.04,
 ) -> dict[str, object]:
-    """Run a deterministic walk-forward backtest over aligned price history."""
+    """Run a deterministic walk-forward backtest over aligned price history.
+
+    Positions chosen at each rebalance are held to the next one, so
+    ``holding_days`` and ``rebalance_every`` must be equal.
+    """
 
     if lookback_days <= 0 or holding_days <= 0 or rebalance_every <= 0 or top_k <= 0:
         raise ValueError(
             "lookback_days, holding_days, rebalance_every, and top_k must be positive. "
             "Use values greater than zero."
+        )
+    if holding_days != rebalance_every:
+        # Each rebalance books one holding-period return and compounds it. With the
+        # hold longer than the rebalance step, the windows overlap and each day's
+        # return is compounded several times (hold 20, rebalance 5: four times);
+        # with it shorter, the days between windows vanish from both the return and
+        # the clock. Overlapping tranches are not modeled, so refuse the mismatch.
+        raise ValueError(
+            f"holding_days ({holding_days}) must equal rebalance_every ({rebalance_every}): "
+            "overlapping or gapped holding windows would be compounded as if back to back."
         )
 
     price_history, price_sources = _load_price_history(

@@ -48,7 +48,9 @@ results/backtest/
 
 Open these first:
 
-- `backtest_summary.csv` is the quickest scorecard for the process.
+- `backtest_summary.csv` is the quickest scorecard for the process. Read
+  `excess_return_t_stat` before the returns: near 0, the edge over equal weight
+  is indistinguishable from noise.
 - `rebalance_log.csv` shows each rebalance date, selected tickers, weights,
   turnover, and transaction-cost drag.
 - `equity_curve.csv` shows strategy, equal weight, and cash through time.

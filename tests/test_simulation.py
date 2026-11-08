@@ -177,3 +177,32 @@ def test_simulate_prediction_market_rejects_out_of_range_probability():
 
     with pytest.raises(ValueError):
         simulate_prediction_market(fundamental_probability=1.0, days=10, scenarios=5)
+
+
+def test_simulate_prices_scales_volatility_with_sqrt_dt():
+    rng = np.random.default_rng(3)
+    returns = pd.Series(rng.normal(loc=0.0005, scale=0.02, size=2000))
+    hist = np.log1p(returns.to_numpy())
+
+    sims = simulate_prices(returns, days=200, scenarios=2000, dt=0.25, seed=5)
+    steps = np.diff(np.log(np.vstack([np.ones(2000), sims.to_numpy()])), axis=0)
+
+    # A quarter-day step carries half the daily volatility and a quarter of the drift.
+    assert steps.std() == pytest.approx(0.5 * hist.std(), rel=0.02)
+    assert steps.mean() == pytest.approx(0.25 * hist.mean(), abs=2e-4)
+
+
+def test_historical_and_gbm_models_agree_on_dt_scaling():
+    rng = np.random.default_rng(4)
+    returns = pd.Series(rng.normal(loc=0.0, scale=0.015, size=3000))
+    mu, sigma = estimate_gbm_parameters(returns)
+    kwargs = {"days": 100, "scenarios": 3000, "dt": 0.1, "seed": 9}
+
+    bootstrap = simulate_prices(returns, current_price=1.0, **kwargs)
+    gbm = simulate_gbm(current_price=1.0, mu=mu, sigma=sigma, **kwargs)
+
+    def step_vol(paths: pd.DataFrame) -> float:
+        logs = np.log(np.vstack([np.ones(paths.shape[1]), paths.to_numpy()]))
+        return float(np.diff(logs, axis=0).std())
+
+    assert step_vol(bootstrap) == pytest.approx(step_vol(gbm), rel=0.03)
