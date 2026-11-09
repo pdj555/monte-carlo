@@ -237,6 +237,75 @@ def test_joint_simulation_keeps_the_correlation_in_the_history(model):
     assert simulated == pytest.approx(historical, abs=0.02)
 
 
+@pytest.mark.parametrize("cash_return", [0.0, 0.01, -0.01])
+def test_joint_gbm_keeps_volatile_correlations_with_constant_asset(cash_return):
+    from simulation import simulate_joint_gbm
+
+    returns = _correlated_returns(0.8)
+    returns.insert(1, "CASH", cash_return)
+    prices = {"A": 100.0, "CASH": 50.0, "B": 200.0}
+    paths = simulate_joint_gbm(
+        returns, days=5, scenarios=10000, dt=0.25, seed=1, current_prices=prices
+    )
+    first = np.log(paths.iloc[0].unstack("ticker").div(pd.Series(prices)))
+    historical = np.log1p(returns[["A", "B"]]).corr().iloc[0, 1]
+    assert first[["A", "B"]].corr().iloc[0, 1] == pytest.approx(historical, abs=0.02)
+    assert np.isfinite(paths.to_numpy()).all()
+
+    expected = 50.0 * (1.0 + cash_return) ** (np.arange(1, 6) * 0.25)
+    np.testing.assert_allclose(paths["CASH"].iloc[:, 0], expected, rtol=1e-14)
+    assert (np.ptp(paths["CASH"].to_numpy(), axis=1) == 0.0).all()
+
+
+def test_joint_gbm_cash_does_not_create_extra_diversification():
+    from analysis import summarize_equal_weight_portfolio
+    from simulation import simulate_joint_gbm
+
+    returns = _correlated_returns(0.8)
+    common = dict(days=20, scenarios=10000, seed=42)
+    pair_prices = {"A": 100.0, "B": 100.0}
+    pair = simulate_joint_gbm(returns, current_prices=pair_prices, **common)
+    pair_risk = summarize_equal_weight_portfolio(pair, current_prices=pair_prices)
+
+    returns.insert(1, "CASH", 0.0)
+    prices = {**pair_prices, "CASH": 100.0}
+    with_cash = simulate_joint_gbm(returns, current_prices=prices, **common)
+    cash_risk = summarize_equal_weight_portfolio(with_cash, current_prices=prices)
+    # One third cash scales risk by 2/3; it must not decorrelate the stocks as well.
+    # The two draws use different RNG dimensions, so allow Monte Carlo sampling error.
+    for metric in ("value_at_risk_95_pct", "expected_shortfall_95_pct"):
+        assert cash_risk[metric] == pytest.approx(pair_risk[metric] * 2.0 / 3.0, rel=0.06)
+
+
+@pytest.mark.parametrize("rho", [-1.0, 1.0])
+def test_joint_gbm_handles_singular_correlations_with_constant_asset(rho):
+    from simulation import simulate_joint_gbm
+
+    logs = np.linspace(-0.02, 0.02, 100)
+    returns = pd.DataFrame({"A": np.expm1(logs), "CASH": 0.0, "B": np.expm1(rho * logs)})
+    paths = simulate_joint_gbm(returns, days=3, scenarios=2000, seed=2)
+    first = np.log(paths.iloc[0].unstack("ticker"))
+    assert np.isfinite(paths.to_numpy()).all()
+    assert first[["A", "B"]].corr().iloc[0, 1] == pytest.approx(rho, abs=1e-8)
+    np.testing.assert_array_equal(paths["CASH"].to_numpy(), 1.0)
+
+
+@pytest.mark.parametrize("volatile", [False, True])
+def test_joint_gbm_handles_at_most_one_volatile_asset(volatile):
+    from simulation import simulate_joint_gbm
+
+    returns = pd.DataFrame({"CASH": [0.01] * 1000, "FLAT": [0.0] * 1000})
+    if volatile:
+        returns["A"] = _correlated_returns(0.0)["A"]
+    paths = simulate_joint_gbm(returns, days=3, scenarios=100, seed=4)
+    assert np.isfinite(paths.to_numpy()).all()
+    expected = np.broadcast_to((1.01 ** np.arange(1, 4))[:, None], (3, 100))
+    np.testing.assert_allclose(paths["CASH"].to_numpy(), expected, rtol=1e-14)
+    np.testing.assert_array_equal(paths["FLAT"].to_numpy(), 1.0)
+    if volatile:
+        assert paths["A"].iloc[0].std() > 0.0
+
+
 def test_identical_histories_give_identical_paths():
     from simulation import simulate_joint_prices
 
@@ -257,15 +326,28 @@ def test_joint_shock_hits_every_ticker_on_the_same_day():
     assert (paths["A"].iloc[-1] < 1.0).any()
 
 
-def test_joint_simulation_uses_only_dates_every_ticker_traded():
-    from simulation import simulate_joint_prices
+@pytest.mark.parametrize("model", ["historical", "gbm"])
+def test_joint_simulation_uses_only_dates_every_ticker_traded(model):
+    from simulation import simulate_joint_gbm, simulate_joint_prices
 
+    simulate = simulate_joint_prices if model == "historical" else simulate_joint_gbm
     returns = pd.DataFrame({"A": [0.01, 0.02, None, 0.03], "B": [None, 0.01, 0.02, 0.04]})
-    paths = simulate_joint_prices(returns, days=3, scenarios=5, seed=0)
-    assert set(paths.columns.get_level_values("ticker")) == {"A", "B"}
+    paths = simulate(returns, days=3, scenarios=5, seed=0)
+    trimmed = simulate(returns.dropna(), days=3, scenarios=5, seed=0)
+    pd.testing.assert_frame_equal(paths, trimmed)
+
+
+@pytest.mark.parametrize("model", ["historical", "gbm"])
+@pytest.mark.parametrize("overlap", [0, 1])
+def test_joint_simulation_rejects_insufficient_overlapping_history(model, overlap):
+    from simulation import simulate_joint_gbm, simulate_joint_prices
+
+    simulate = simulate_joint_prices if model == "historical" else simulate_joint_gbm
+    returns = pd.DataFrame({"A": [0.01, 0.02, None], "B": [None, None, 0.03]})
+    if overlap:
+        returns.loc[0, "B"] = 0.01
     with pytest.raises(ValueError, match="at least two dates"):
-        disjoint = pd.DataFrame({"A": [0.01, None], "B": [None, 0.02]})
-        simulate_joint_prices(disjoint, days=3, scenarios=5)
+        simulate(returns, days=3, scenarios=5)
 
 
 def test_joint_portfolio_var_matches_the_closed_form_where_independent_draws_understated_it():

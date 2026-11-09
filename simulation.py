@@ -412,10 +412,14 @@ def simulate_joint_gbm(
     sigma = np.array([p[1] for p in params])
 
     log_returns = np.log1p(aligned.to_numpy(dtype=float))
-    if len(tickers) == 1 or (sigma == 0).any():
-        correlation = np.eye(len(tickers))
-    else:
-        correlation = np.corrcoef(log_returns, rowvar=False)
+    # Repeated nonzero returns can have a tiny positive std from roundoff.
+    variable = (sigma > 0.0) & (np.ptp(log_returns, axis=0) > 0.0)
+    sigma[~variable] = 0.0
+    correlation = np.eye(len(tickers))
+    if variable.sum() > 1:
+        correlation[np.ix_(variable, variable)] = np.corrcoef(
+            log_returns[:, variable], rowvar=False
+        )
     # Nearest valid correlation if rounding left it slightly indefinite.
     eigenvalues, eigenvectors = np.linalg.eigh(correlation)
     eigenvalues = np.clip(eigenvalues, 1e-12, None)
