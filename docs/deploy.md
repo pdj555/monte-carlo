@@ -24,7 +24,7 @@ Operational notes:
 - `Live` downloads Yahoo Finance prices through `yfinance`. When that fails, the
   engine falls back to bundled CSVs under `sample_data/`.
 - `Live only` requires a successful download and never falls back.
-- `Sample` is deterministic and offline — use it for CI and demos without network.
+- `Sample` is deterministic and offline. Use it for CI and demos without network.
 - `CSV` paths are local to the machine running the Node server. On Vercel, use
   bundled sample data unless you add CSV files to the deployment bundle.
 - Browser runs should stay small. Use the CLI for large scenario counts and

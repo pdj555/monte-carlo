@@ -22,14 +22,15 @@ results/
 
 Open these first:
 
-- `action_plan.md` is the shortest human-readable decision.
-- `report.json` is the full machine-readable record, including inputs, rankings,
-  allocations, path-aware allocation portfolio risk, errors, and `price_sources`.
+- `action_plan.md` is the decision stated in the fewest words.
+- `report.json` is the full record, written for code to read. It includes inputs, rankings,
+  allocations, the allocation portfolio risk measured from the simulated paths,
+  errors, and `price_sources`.
 - `rankings.csv` is the scored list of tickers after the model and guardrails.
 - `allocations.csv` is the suggested weight for the names that survived. The
   matching `allocation_portfolio_summary` in `report.json` measures the
-  simulated portfolio after cash buffers and risk-budget scaling.
-- `summaries.csv` and `summaries.json` are the per-ticker simulation stats.
+  simulated portfolio after cash buffers and scaling to the risk budget.
+- `summaries.csv` and `summaries.json` are the simulation stats for each ticker.
 - `*_distribution.png` and `*_paths.png` are the fastest visual check for shape,
   spread, and downside.
 
@@ -52,7 +53,7 @@ Open these first:
   `excess_return_t_stat` before the returns: near 0, the edge over equal weight
   is indistinguishable from noise.
 - `rebalance_log.csv` shows each rebalance date, selected tickers, weights,
-  turnover, and transaction-cost drag.
+  turnover, and the drag from transaction costs.
 - `equity_curve.csv` shows strategy, equal weight, and cash through time.
 - `equity_curve.png` is the fastest read on path shape and drawdown.
 - `price_sources.json` records where the history came from so live, offline,
