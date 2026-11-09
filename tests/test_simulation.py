@@ -206,3 +206,102 @@ def test_historical_and_gbm_models_agree_on_dt_scaling():
         return float(np.diff(logs, axis=0).std())
 
     assert step_vol(bootstrap) == pytest.approx(step_vol(gbm), rel=0.03)
+
+
+def _correlated_returns(rho: float, n: int = 1000, seed: int = 7) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
+    z = rng.multivariate_normal([0.0, 0.0], [[1.0, rho], [rho, 1.0]], size=n) * 0.02
+    return pd.DataFrame({"A": np.expm1(z[:, 0]), "B": np.expm1(z[:, 1])})
+
+
+def test_joint_bootstrap_with_one_ticker_matches_the_single_ticker_path():
+    from simulation import simulate_joint_prices
+
+    returns = _correlated_returns(0.5)["A"]
+    common = dict(days=20, scenarios=40, seed=3, block_size=5)
+    single = simulate_prices(returns, current_price=10.0, **common)
+    joint = simulate_joint_prices(returns.to_frame("A"), current_prices={"A": 10.0}, **common)
+    np.testing.assert_allclose(joint.xs("A", axis=1, level="ticker").to_numpy(), single.to_numpy())
+
+
+@pytest.mark.parametrize("model", ["historical", "gbm"])
+def test_joint_simulation_keeps_the_correlation_in_the_history(model):
+    from simulation import simulate_joint_gbm, simulate_joint_prices
+
+    returns = _correlated_returns(0.8)
+    simulate = simulate_joint_prices if model == "historical" else simulate_joint_gbm
+    paths = simulate(returns, days=1, scenarios=20000, seed=1)
+    day_one = np.log(paths.iloc[0].unstack("ticker"))
+    simulated = np.corrcoef(day_one["A"], day_one["B"])[0, 1]
+    historical = np.corrcoef(np.log1p(returns.to_numpy()), rowvar=False)[0, 1]
+    assert simulated == pytest.approx(historical, abs=0.02)
+
+
+def test_identical_histories_give_identical_paths():
+    from simulation import simulate_joint_prices
+
+    one = _correlated_returns(0.0)["A"]
+    twins = pd.DataFrame({"A": one, "B": one})
+    paths = simulate_joint_prices(twins, days=10, scenarios=100, seed=0)
+    np.testing.assert_allclose(paths["A"].to_numpy(), paths["B"].to_numpy())
+
+
+def test_joint_shock_hits_every_ticker_on_the_same_day():
+    from simulation import simulate_joint_prices
+
+    flat = pd.DataFrame({"A": [0.0] * 10, "B": [0.0] * 10})
+    paths = simulate_joint_prices(
+        flat, days=50, scenarios=200, seed=2, shock_probability=0.1, shock_return=-0.5
+    )
+    np.testing.assert_allclose(paths["A"].to_numpy(), paths["B"].to_numpy())
+    assert (paths["A"].iloc[-1] < 1.0).any()
+
+
+def test_joint_simulation_uses_only_dates_every_ticker_traded():
+    from simulation import simulate_joint_prices
+
+    returns = pd.DataFrame({"A": [0.01, 0.02, None, 0.03], "B": [None, 0.01, 0.02, 0.04]})
+    paths = simulate_joint_prices(returns, days=3, scenarios=5, seed=0)
+    assert set(paths.columns.get_level_values("ticker")) == {"A", "B"}
+    with pytest.raises(ValueError, match="at least two dates"):
+        disjoint = pd.DataFrame({"A": [0.01, None], "B": [None, 0.02]})
+        simulate_joint_prices(disjoint, days=3, scenarios=5)
+
+
+def test_joint_portfolio_var_matches_the_closed_form_where_independent_draws_understated_it():
+    """50/50 portfolio of two assets with correlation 0.8, 20-day 95% VaR.
+
+    Drawing each asset's future on its own priced the pair as uncorrelated: about 10% VaR.
+    Drawing them together gives about 13%, which is what the normal closed form says.
+    """
+    import zlib
+
+    from analysis import summarize_equal_weight_portfolio
+    from simulation import simulate_joint_prices
+
+    returns = _correlated_returns(0.8)
+    prices = {"A": 100.0, "B": 100.0}
+    joint = simulate_joint_prices(returns, days=20, scenarios=20000, seed=42, current_prices=prices)
+    frames = []
+    for ticker in ("A", "B"):
+        seed = 42 + zlib.adler32(ticker.encode())
+        alone = simulate_prices(
+            returns[ticker], days=20, scenarios=20000, seed=seed, current_price=100.0
+        )
+        alone.columns = pd.MultiIndex.from_product(
+            [[ticker], alone.columns], names=["ticker", "scenario"]
+        )
+        frames.append(alone)
+    separate = pd.concat(frames, axis=1)
+
+    log_returns = np.log1p(returns.to_numpy())
+    weights = np.array([0.5, 0.5])
+    mean = log_returns.mean(axis=0) @ weights * 20
+    spread = np.sqrt(weights @ np.cov(log_returns, rowvar=False) @ weights * 20)
+    closed_form = 1.0 - np.exp(mean - 1.6449 * spread)
+
+    var = "value_at_risk_95_pct"
+    joint_var = summarize_equal_weight_portfolio(joint, current_prices=prices)[var]
+    separate_var = summarize_equal_weight_portfolio(separate, current_prices=prices)[var]
+    assert joint_var == pytest.approx(closed_form, rel=0.05)
+    assert separate_var < 0.8 * closed_form

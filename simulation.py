@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Mapping, Optional
 
 import numpy as np
 import pandas as pd
@@ -10,7 +10,9 @@ import pandas as pd
 __all__ = [
     "estimate_gbm_parameters",
     "simulate_prices",
+    "simulate_joint_prices",
     "simulate_gbm",
+    "simulate_joint_gbm",
     "simulate_prediction_market",
 ]
 
@@ -30,6 +32,95 @@ def _as_float(value: float | pd.Series) -> float:
     else:
         scalar = value
     return float(scalar)
+
+
+def _bootstrap_rows(
+    rng: np.random.Generator, observations: int, days: int, scenarios: int, block_size: int
+) -> np.ndarray:
+    """Row numbers to resample, shape ``(days, scenarios)``.
+
+    Blocks wrap from the last observation to the first (a circular block bootstrap).
+    Every asset in a joint simulation reads the same rows, so each simulated day is a
+    real historical day for all of them at once.
+    """
+
+    if block_size == 1:
+        return rng.integers(0, observations, size=(days, scenarios))
+    blocks_needed = int(np.ceil(days / block_size))
+    block_starts = rng.integers(0, observations, size=(blocks_needed, scenarios))
+    offsets = np.arange(block_size, dtype=int)[:, None, None]
+    block_indices = (block_starts[None, :, :] + offsets) % observations
+    return block_indices.transpose(1, 0, 2).reshape(-1, scenarios)[:days, :]
+
+
+def _clean_returns(returns: pd.Series) -> np.ndarray:
+    if returns.empty:
+        raise ValueError("returns must contain at least one observation")
+    cleaned = pd.to_numeric(returns, errors="coerce").dropna()
+    if cleaned.empty:
+        raise ValueError("returns must contain at least one numeric observation")
+    values = cleaned.to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError("returns must contain only finite values")
+    if (values <= -1.0).any():
+        raise ValueError("returns must be greater than -1.0")
+    return values
+
+
+def _rescale_for_dt(sampled_returns: np.ndarray, history: np.ndarray, dt: float) -> np.ndarray:
+    """Scale sampled returns to a step of ``dt`` days: drift by ``dt``, spread by ``sqrt(dt)``."""
+
+    if dt == 1.0:
+        return sampled_returns
+    center = np.log1p(history).mean(axis=0)
+    log_returns = np.log1p(sampled_returns)
+    return np.expm1(center * dt + (log_returns - center) * np.sqrt(dt))
+
+
+def _paths_frame(cumulative: np.ndarray) -> pd.DataFrame:
+    days, scenarios = cumulative.shape
+    index = pd.RangeIndex(start=1, stop=days + 1, name="day")
+    columns = pd.RangeIndex(start=1, stop=scenarios + 1, name="scenario")
+    return pd.DataFrame(cumulative, index=index, columns=columns)
+
+
+def _joint_frame(paths: dict[str, np.ndarray]) -> pd.DataFrame:
+    """Stack per-ticker ``(days, scenarios)`` arrays under a ticker/scenario MultiIndex."""
+
+    frames = []
+    for ticker, cumulative in paths.items():
+        frame = _paths_frame(cumulative)
+        frame.columns = pd.MultiIndex.from_product(
+            [[ticker], frame.columns], names=["ticker", "scenario"]
+        )
+        frames.append(frame)
+    return pd.concat(frames, axis=1)
+
+
+def _aligned_returns(returns: pd.DataFrame) -> pd.DataFrame:
+    if not isinstance(returns, pd.DataFrame) or returns.shape[1] == 0:
+        raise ValueError("returns must be a DataFrame with one column per ticker")
+    numeric = returns.apply(pd.to_numeric, errors="coerce").dropna(how="any")
+    if len(numeric.index) < 2:
+        raise ValueError("returns must share at least two dates across every ticker")
+    values = numeric.to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError("returns must contain only finite values")
+    if (values <= -1.0).any():
+        raise ValueError("returns must be greater than -1.0")
+    return numeric
+
+
+def _start_prices(current_prices: Optional[Mapping[str, float]], tickers: list[str]) -> np.ndarray:
+    if current_prices is None:
+        return np.ones(len(tickers))
+    missing = [ticker for ticker in tickers if ticker not in current_prices]
+    if missing:
+        raise ValueError(f"current_prices missing entries for: {', '.join(missing)}")
+    start = np.array([_as_float(current_prices[ticker]) for ticker in tickers], dtype=float)
+    if (start <= 0).any():
+        raise ValueError("current prices must be positive")
+    return start
 
 
 def estimate_gbm_parameters(returns: pd.Series) -> tuple[float, float]:
@@ -138,15 +229,7 @@ def simulate_prices(
         raise ValueError("returns must be greater than -1.0")
 
     rng = np.random.default_rng(seed)
-    if block_size == 1:
-        sample_indices = rng.integers(0, values.shape[0], size=(days, scenarios))
-        sampled_returns = values[sample_indices]
-    else:
-        blocks_needed = int(np.ceil(days / block_size))
-        block_starts = rng.integers(0, values.shape[0], size=(blocks_needed, scenarios))
-        offsets = np.arange(block_size, dtype=int)[:, None, None]
-        block_indices = (block_starts[None, :, :] + offsets) % values.shape[0]
-        sampled_returns = values[block_indices].transpose(1, 0, 2).reshape(-1, scenarios)[:days, :]
+    sampled_returns = values[_bootstrap_rows(rng, values.shape[0], days, scenarios, block_size)]
 
     if shock_probability > 0.0:
         shock_mask = rng.random(size=(days, scenarios)) < shock_probability
@@ -156,14 +239,11 @@ def simulate_prices(
             sampled_returns,
         )
 
-    if dt != 1.0:
-        # Rescale each sampled log return about the historical mean: the drift scales
-        # with dt and the spread with sqrt(dt), as in simulate_gbm. Multiplying the log
-        # return by dt would shrink the volatility by dt instead, so a quarter-day step
-        # carried a quarter of the daily volatility rather than half of it.
-        center = float(np.log1p(values).mean())
-        log_returns = np.log1p(sampled_returns)
-        sampled_returns = np.expm1(center * dt + (log_returns - center) * np.sqrt(dt))
+    # Rescale each sampled log return about the historical mean: the drift scales
+    # with dt and the spread with sqrt(dt), as in simulate_gbm. Multiplying the log
+    # return by dt would shrink the volatility by dt instead, so a quarter-day step
+    # carried a quarter of the daily volatility rather than half of it.
+    sampled_returns = _rescale_for_dt(sampled_returns, values, dt)
 
     cumulative = np.cumprod(1 + sampled_returns, axis=0)
 
@@ -248,6 +328,115 @@ def simulate_gbm(
     index = pd.RangeIndex(start=1, stop=days + 1, name="day")
     columns = pd.RangeIndex(start=1, stop=scenarios + 1, name="scenario")
     return pd.DataFrame(cumulative, index=index, columns=columns)
+
+
+def simulate_joint_prices(
+    returns: pd.DataFrame,
+    days: int,
+    scenarios: int,
+    dt: float = 1.0,
+    seed: Optional[int] = None,
+    current_prices: Optional[Mapping[str, float]] = None,
+    shock_probability: float = 0.0,
+    shock_return: float = -0.15,
+    block_size: int = 1,
+) -> pd.DataFrame:
+    """Bootstrap several assets together, one resampled historical day for all of them.
+
+    ``returns`` holds one column per ticker. Only dates every ticker traded are used.
+    Each simulated day draws one historical date and applies that date's return to
+    every ticker, so the co-movement in the history (correlation, joint crashes)
+    carries into every path. A shock hits every ticker on the same day.
+
+    Returns a frame with a ``ticker``/``scenario`` column MultiIndex. With one column
+    and the same seed the result equals :func:`simulate_prices`.
+    """
+
+    if days <= 0 or scenarios <= 0:
+        raise ValueError("days and scenarios must be positive integers")
+    if dt <= 0:
+        raise ValueError("dt must be positive")
+    if block_size <= 0:
+        raise ValueError("block_size must be a positive integer")
+    _validate_shock_inputs(shock_probability, shock_return)
+    aligned = _aligned_returns(returns)
+    tickers = [str(column) for column in aligned.columns]
+    values = aligned.to_numpy(dtype=float)
+    start = _start_prices(current_prices, tickers)
+
+    rng = np.random.default_rng(seed)
+    rows = _bootstrap_rows(rng, values.shape[0], days, scenarios, block_size)
+    shock_mask = (
+        rng.random(size=(days, scenarios)) < shock_probability if shock_probability > 0.0 else None
+    )
+    paths: dict[str, np.ndarray] = {}
+    for column, ticker in enumerate(tickers):
+        history = values[:, column]
+        sampled = history[rows]
+        if shock_mask is not None:
+            sampled = np.where(shock_mask, (1.0 + sampled) * (1.0 + shock_return) - 1.0, sampled)
+        sampled = _rescale_for_dt(sampled, history, dt)
+        paths[ticker] = np.cumprod(1 + sampled, axis=0) * start[column]
+    return _joint_frame(paths)
+
+
+def simulate_joint_gbm(
+    returns: pd.DataFrame,
+    days: int,
+    scenarios: int,
+    dt: float = 1.0,
+    seed: Optional[int] = None,
+    current_prices: Optional[Mapping[str, float]] = None,
+    shock_probability: float = 0.0,
+    shock_return: float = -0.15,
+) -> pd.DataFrame:
+    """Correlated geometric Brownian motion for several assets.
+
+    Drift and volatility come from each ticker's own history, as in
+    :func:`estimate_gbm_parameters`; the correlation of daily log returns comes
+    from the dates every ticker traded. Shocks are drawn through the Cholesky factor of
+    that correlation, so each ticker keeps its own volatility and the pairs keep
+    their co-movement. A shock hits every ticker on the same day.
+    """
+
+    if days <= 0 or scenarios <= 0:
+        raise ValueError("days and scenarios must be positive integers")
+    if dt <= 0:
+        raise ValueError("dt must be positive")
+    _validate_shock_inputs(shock_probability, shock_return)
+    aligned = _aligned_returns(returns)
+    tickers = [str(column) for column in aligned.columns]
+    start = _start_prices(current_prices, tickers)
+    params = [estimate_gbm_parameters(aligned[column]) for column in aligned.columns]
+    mu = np.array([p[0] for p in params])
+    sigma = np.array([p[1] for p in params])
+
+    log_returns = np.log1p(aligned.to_numpy(dtype=float))
+    if len(tickers) == 1 or (sigma == 0).any():
+        correlation = np.eye(len(tickers))
+    else:
+        correlation = np.corrcoef(log_returns, rowvar=False)
+    # Nearest valid correlation if rounding left it slightly indefinite.
+    eigenvalues, eigenvectors = np.linalg.eigh(correlation)
+    eigenvalues = np.clip(eigenvalues, 1e-12, None)
+    repaired = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
+    scale = np.sqrt(np.diag(repaired))
+    factor = np.linalg.cholesky(repaired / np.outer(scale, scale))
+
+    rng = np.random.default_rng(seed)
+    independent = rng.standard_normal(size=(days, scenarios, len(tickers)))
+    shocks = independent @ factor.T
+    shock_mask = (
+        rng.random(size=(days, scenarios)) < shock_probability if shock_probability > 0.0 else None
+    )
+    paths: dict[str, np.ndarray] = {}
+    for column, ticker in enumerate(tickers):
+        drift = (mu[column] - 0.5 * sigma[column] ** 2) * dt
+        steps = drift + sigma[column] * np.sqrt(dt) * shocks[:, :, column]
+        if shock_mask is not None:
+            steps = np.where(shock_mask, steps + np.log1p(shock_return), steps)
+        paths[ticker] = np.exp(np.cumsum(steps, axis=0)) * start[column]
+    return _joint_frame(paths)
 
 
 def simulate_prediction_market(

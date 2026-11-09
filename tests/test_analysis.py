@@ -190,3 +190,16 @@ def test_summarize_final_prices_reports_benchmark_metrics():
     assert summary["benchmark_return_pct"] == pytest.approx(0.02)
     assert summary["expected_excess_return"] == pytest.approx(summary["expected_return"] - 0.02)
     assert summary["prob_beat_benchmark"] == pytest.approx(0.5)
+
+
+def test_drawdown_counts_from_the_starting_price():
+    from analysis import summarize_final_prices
+
+    paths = pd.DataFrame(
+        {1: [88.0, 95.0], 2: [100.0, 110.0]}, index=pd.RangeIndex(1, 3, name="day")
+    )
+    with_start = summarize_final_prices(paths, current_price=100.0)
+    # Path 1 fell 12% on its first day; measured from day 1 it would show no drawdown.
+    assert with_start["max_drawdown_mean"] == pytest.approx(0.06)
+    assert with_start["prob_drawdown_10_pct"] == pytest.approx(0.5)
+    assert summarize_final_prices(paths)["max_drawdown_mean"] == pytest.approx(0.0)

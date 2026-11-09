@@ -1242,3 +1242,32 @@ def test_cli_prediction_market_runs_without_price_data(tmp_path):
 def test_cli_prediction_market_requires_fundamental_probability():
     with pytest.raises(SystemExit):
         parse_args(["--model", "prediction_market"])
+
+
+def test_simulate_cli_draws_one_shared_future_for_every_ticker(tmp_path):
+    """Two tickers with the same history move together, so they add no diversification."""
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    rng = np.random.default_rng(5)
+    close = 100 * np.cumprod(1 + rng.normal(0.0, 0.02, 300))
+    dates = pd.date_range("2023-01-01", periods=len(close), freq="D")
+    for ticker in ("AAA", "BBB"):
+        frame = pd.DataFrame({"Date": dates, "Close": close})
+        frame.to_csv(data_dir / f"{ticker}.csv", index=False)
+
+    args = simulate_cli.build_simulation_args(
+        tickers="AAA,BBB",
+        days=20,
+        scenarios=2000,
+        seed=7,
+        offline_path=str(data_dir),
+        offline_only=True,
+        show=False,
+        no_plots=True,
+    )
+    result = simulate_cli.run(args)
+
+    alone = result["summaries"].loc["AAA", "value_at_risk_95_pct"]
+    portfolio = result["portfolio_summary"]["value_at_risk_95_pct"]
+    assert portfolio == pytest.approx(alone, rel=1e-9)

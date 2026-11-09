@@ -43,7 +43,7 @@ monte-carlo evaluate evaluation_sets/sample-stability.json --output results/eval
 
 ## What it does
 
-- Simulation. Multi-asset Monte Carlo with configurable scenarios, horizons, and seeds. Ranked output with guardrails before any allocation.
+- Simulation. Multi-asset Monte Carlo with configurable scenarios, horizons, and seeds. Ranked output with guardrails before any allocation. Several tickers are simulated together: each scenario resamples one historical day for all of them (or draws correlated GBM shocks), so portfolio risk keeps their co-movement. Drawn one ticker at a time, a 50/50 pair with 0.8 correlation showed a 20-day 95% VaR of 10%; drawn together it shows 13%, which is what the normal closed form gives. Drawdowns are measured from the starting price, so a fall on the first simulated day counts.
 - Walk-forward backtesting. Lookback and hold windows; positions are held to the next rebalance, so no day's return is counted twice. No lookahead bias: parameters fit only on data the strategy could have seen. The summary reports the t-statistic of the per-period return over equal weight, so an edge can be told from noise.
 - Decision stability. The `evaluate` command runs a candidate decision across seeds and model variants and reports whether the conclusion holds. Unstable decisions fail the gate.
 - Auditable provenance. Every price input carries its source. `auto`, `offline`, or `online`. Local CSVs need `Date` and `Close`. Fixtures live in `sample_data/`.

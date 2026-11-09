@@ -133,9 +133,15 @@ def summarize_final_prices(
             summary["prob_touch_max_loss"] = float(loss_hits.any(axis=0).mean())
             summary["median_days_to_max_loss"] = _median_first_hit_day(loss_hits)
 
-    if len(df.index) > 1:
-        running_peaks = df.cummax()
-        drawdown = 1.0 - df.div(running_peaks)
+    # Drawdown runs from the starting price when it is known: a path that falls on its
+    # first day is already in drawdown, which a peak taken from day 1 would miss.
+    paths = df
+    if current_price is not None:
+        start = pd.DataFrame([[float(current_price)] * df.shape[1]], columns=df.columns)
+        paths = pd.concat([start, df], ignore_index=True)
+    if len(paths.index) > 1:
+        running_peaks = paths.cummax()
+        drawdown = 1.0 - paths.div(running_peaks)
         max_drawdown = drawdown.max(axis=0)
 
         summary["max_drawdown_mean"] = float(max_drawdown.mean())
