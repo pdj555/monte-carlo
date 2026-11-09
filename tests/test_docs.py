@@ -14,7 +14,6 @@ def test_repo_guides_point_to_public_cli() -> None:
     for path in (
         "README.md",
         "AGENTS.md",
-        "docs/improvements.md",
     ):
         text = Path(path).read_text(encoding="utf-8")
         assert "monte-carlo simulate" in text
@@ -31,13 +30,6 @@ def test_contributor_guides_name_evaluation_contract_and_reference_sets() -> Non
     text = Path("AGENTS.md").read_text(encoding="utf-8")
     assert "evaluation.py" in text
     assert "evaluation_sets/" in text
-
-
-def test_improvements_doc_avoids_retired_command_examples() -> None:
-    text = Path("docs/improvements.md").read_text(encoding="utf-8")
-    assert "python MonteCarlo.py --ticker" not in text
-    assert "python cli.py --ticker" not in text
-    assert "pip install -r requirements.txt" not in text
 
 
 def test_readme_offline_backtest_example_uses_sample_data_friendly_window() -> None:

@@ -148,8 +148,8 @@ def build_public_parser() -> argparse.ArgumentParser:
     backtest_parser.add_argument(
         "--rebalance",
         type=positive_int,
-        default=20,
-        help="Trading days between rebalances.",
+        default=None,
+        help="Trading days between rebalances. Must equal --hold; defaults to it.",
     )
     backtest_parser.add_argument(
         "--top",
@@ -280,7 +280,7 @@ def _build_public_backtest_legacy_args(args: argparse.Namespace) -> argparse.Nam
         tickers=_public_tickers_to_csv_arg(list(args.tickers)),
         lookback_days=int(args.lookback),
         holding_days=int(args.hold),
-        rebalance_every=int(args.rebalance),
+        rebalance_every=int(args.hold if args.rebalance is None else args.rebalance),
         top_k=int(args.top),
         model=str(args.model),
         scenarios=int(args.scenarios),

@@ -44,7 +44,7 @@ monte-carlo evaluate evaluation_sets/sample-stability.json --output results/eval
 ## What it does
 
 - Simulation. Multi-asset Monte Carlo with configurable scenarios, horizons, and seeds. Ranked output with guardrails before any allocation.
-- Walk-forward backtesting. Lookback, hold, and rebalance windows. No lookahead bias: parameters fit only on data the strategy could have seen.
+- Walk-forward backtesting. Lookback and hold windows; positions are held to the next rebalance, so no day's return is counted twice. No lookahead bias: parameters fit only on data the strategy could have seen. The summary reports the t-statistic of the per-period return over equal weight, so an edge can be told from noise.
 - Decision stability. The `evaluate` command runs a candidate decision across seeds and model variants and reports whether the conclusion holds. Unstable decisions fail the gate.
 - Auditable provenance. Every price input carries its source. `auto`, `offline`, or `online`. Local CSVs need `Date` and `Close`. Fixtures live in `sample_data/`.
 

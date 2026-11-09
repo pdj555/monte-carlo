@@ -91,7 +91,9 @@ def simulate_prices(
     scenarios : int
         Number of simulated price paths.
     dt : float, optional
-        Time increment for each step. ``1.0`` corresponds to daily steps.
+        Time increment for each step. ``1.0`` corresponds to daily steps. Each
+        sampled log return is rescaled about the historical mean so the drift
+        scales with ``dt`` and the volatility with ``sqrt(dt)``.
     seed : int, optional
         Random seed for reproducible simulations.
     current_price : float or pandas.Series, optional
@@ -155,7 +157,13 @@ def simulate_prices(
         )
 
     if dt != 1.0:
-        sampled_returns = np.expm1(np.log1p(sampled_returns) * dt)
+        # Rescale each sampled log return about the historical mean: the drift scales
+        # with dt and the spread with sqrt(dt), as in simulate_gbm. Multiplying the log
+        # return by dt would shrink the volatility by dt instead, so a quarter-day step
+        # carried a quarter of the daily volatility rather than half of it.
+        center = float(np.log1p(values).mean())
+        log_returns = np.log1p(sampled_returns)
+        sampled_returns = np.expm1(center * dt + (log_returns - center) * np.sqrt(dt))
 
     cumulative = np.cumprod(1 + sampled_returns, axis=0)
 
