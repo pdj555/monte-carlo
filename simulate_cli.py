@@ -32,6 +32,8 @@ from decision import (
 from simulation import (
     estimate_gbm_parameters,
     simulate_gbm,
+    simulate_joint_gbm,
+    simulate_joint_prices,
     simulate_prediction_market,
     simulate_prices,
 )
@@ -155,6 +157,65 @@ def _simulate_model(
         dt=args.dt,
         seed=ticker_seed,
     )
+
+
+def _simulate_tickers(
+    args: argparse.Namespace,
+    returns_by_ticker: dict[str, pd.Series],
+    current_prices: dict[str, float],
+) -> dict[str, pd.DataFrame]:
+    """Simulate every ticker, each frame under a ticker/scenario column MultiIndex.
+
+    Two or more tickers under the historical or GBM model are simulated together, so
+    scenario ``k`` is one shared future for all of them and the portfolio numbers keep
+    the tickers' co-movement. Simulated one at a time, each ticker drew its own
+    future, which priced every pair as uncorrelated and understated portfolio risk.
+    """
+
+    tickers = list(returns_by_ticker)
+    if len(tickers) > 1 and args.model in {"historical", "gbm"}:
+        frame = pd.concat(returns_by_ticker, axis=1, join="inner")
+        if len(frame.index) < 2:
+            raise ValueError(
+                "The tickers share fewer than two trading days, so they cannot be simulated "
+                "together. Use a date range they all cover."
+            )
+        dropped = max(len(r.index) for r in returns_by_ticker.values()) - len(frame.index)
+        if dropped:
+            LOGGER.info("Joint simulation uses the %d days every ticker traded", len(frame.index))
+        common = dict(
+            days=args.days,
+            scenarios=args.scenarios,
+            dt=args.dt,
+            seed=args.seed,
+            current_prices=current_prices,
+            shock_probability=float(args.shock_probability),
+            shock_return=float(args.shock_return),
+        )
+        if args.model == "historical":
+            joint = simulate_joint_prices(frame, block_size=int(args.block_size), **common)
+        else:
+            joint = simulate_joint_gbm(frame, **common)
+        return {ticker: joint.loc[:, [ticker]] for ticker in tickers}
+
+    sims_by_ticker: dict[str, pd.DataFrame] = {}
+    for ticker in tickers:
+        ticker_seed = (
+            None
+            if args.seed is None
+            else int(args.seed) + zlib.adler32(ticker.encode("utf-8"))
+        )
+        sims = _simulate_model(
+            args=args,
+            returns=returns_by_ticker[ticker],
+            current_price=current_prices[ticker],
+            ticker_seed=ticker_seed,
+        ).copy()
+        sims.columns = pd.MultiIndex.from_product(
+            [[ticker], sims.columns], names=["ticker", "scenario"]
+        )
+        sims_by_ticker[ticker] = sims
+    return sims_by_ticker
 
 
 def _save_outputs(
@@ -341,6 +402,7 @@ def run(
     horizon_years = float(args.days) * float(args.dt) / 252.0
     benchmark_return_pct = (1.0 + float(args.annual_cash_yield)) ** horizon_years - 1.0
 
+    returns_by_ticker: dict[str, pd.Series] = {}
     for ticker in tickers:
         if args.model == "prediction_market":
             current_price = float(
@@ -383,22 +445,11 @@ def run(
 
             current_price = float(prices.iloc[-1])
         current_prices[ticker] = current_price
-        ticker_seed = (
-            None
-            if args.seed is None
-            else int(args.seed) + zlib.adler32(ticker.encode("utf-8"))
-        )
-        sims = _simulate_model(
-            args=args,
-            returns=returns,
-            current_price=current_price,
-            ticker_seed=ticker_seed,
-        )
+        returns_by_ticker[ticker] = returns
 
-        sims = sims.copy()
-        sims.columns = pd.MultiIndex.from_product(
-            [[ticker], sims.columns], names=["ticker", "scenario"]
-        )
+    sims_by_ticker = _simulate_tickers(args, returns_by_ticker, current_prices)
+    for ticker, sims in sims_by_ticker.items():
+        current_price = current_prices[ticker]
         combined_frames.append(sims)
 
         summary = summarize_final_prices(
