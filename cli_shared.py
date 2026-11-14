@@ -3,11 +3,29 @@
 from __future__ import annotations
 
 import argparse
+import re
 from importlib import metadata
 
 import pandas as pd
 
 FALLBACK_VERSION = "0.1.0"
+
+# Upper bounds the public CLI accepts. A run holds days x scenarios prices per
+# ticker in memory, so the product is bounded as well as each factor.
+MAX_SCENARIOS = 1_000_000
+MAX_DAYS = 25_200
+MAX_PATH_CELLS = 50_000_000
+# The largest seed accepted. Every value up to it seeds numpy unchanged and is
+# an exact integer in JSON readers that hold numbers as doubles.
+MAX_SEED = 2**32 - 1
+
+
+class InputError(ValueError):
+    """Something the caller supplied was rejected: a setting, a file, a path.
+
+    Only this (and price data that cannot be loaded) is the caller's to fix.
+    Any other exception from the engine is treated as a fault in the program.
+    """
 
 
 class IntentionalDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
@@ -28,21 +46,49 @@ def package_version() -> str:
         return FALLBACK_VERSION
 
 
+_PLAIN_INTEGER = re.compile(r"-?[0-9]+")
+
+
+def _plain_int(value: str) -> int:
+    """Parse an integer written as plain ASCII digits.
+
+    ``int`` also takes ``4_2``, surrounding spaces, a leading ``+`` and digits
+    from other scripts; none of those is what a caller typing a count means.
+    """
+
+    if not isinstance(value, str) or _PLAIN_INTEGER.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError("must be an integer")
+    return int(value)
+
+
 def positive_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be an integer") from exc
+    parsed = _plain_int(value)
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return parsed
 
 
+def bounded_positive_int(maximum: int):
+    """Return an argparse type for integers from 1 to ``maximum``."""
+
+    def parse(value: str) -> int:
+        parsed = positive_int(value)
+        if parsed > maximum:
+            raise argparse.ArgumentTypeError(f"must be at most {maximum}")
+        return parsed
+
+    return parse
+
+
+def seed_int(value: str) -> int:
+    parsed = non_negative_int(value)
+    if parsed > MAX_SEED:
+        raise argparse.ArgumentTypeError(f"must be at most {MAX_SEED}")
+    return parsed
+
+
 def non_negative_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be an integer") from exc
+    parsed = _plain_int(value)
     if parsed < 0:
         raise argparse.ArgumentTypeError("must be a non-negative integer")
     return parsed

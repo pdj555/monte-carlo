@@ -80,3 +80,71 @@ jobs:
         env:
           MPLBACKEND: Agg
         run: npm run build
+
+  agent-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the locked dependencies, then the package as AGENTS.md says
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.lock.txt
+          python3 -m pip install -e '.[dev]'
+
+      - name: Run the JSON commands and check them against the schema
+        env:
+          MPLBACKEND: Agg
+        run: |
+          monte-carlo simulate AAPL MSFT --source offline --data-path sample_data --days 5 --scenarios 100 --seed 42 --json > simulate.json
+          monte-carlo simulate AAPL MSFT --source offline --data-path sample_data --days 5 --scenarios 100 --seed 42 --json > simulate-again.json
+          monte-carlo backtest AAPL MSFT --source offline --data-path sample_data --lookback 5 --hold 3 --top 1 --scenarios 100 --seed 42 --json > backtest.json
+          monte-carlo evaluate evaluation_sets/sample-stability.json --json > evaluate.json
+          cmp simulate.json simulate-again.json
+          monte-carlo schema > schema.json
+          cmp schema.json schemas/cli-result.v1.schema.json
+          set +e
+          monte-carlo simulate AAPL MSFT --source offline --data-path sample_data --days 5 --scenarios 100 --seed 42 --json > /dev/full
+          full_exit=$?
+          set -e
+          test "$full_exit" -eq 4
+          set +e
+          monte-carlo simulate AAPL --days not-a-number --json > usage.json
+          usage_exit=$?
+          set -e
+          test "$usage_exit" -eq 2
+          python - <<'PY'
+          import json
+          from jsonschema import Draft202012Validator
+
+          with open("schemas/cli-result.v1.schema.json", encoding="utf-8") as handle:
+              schema = json.load(handle)
+          Draft202012Validator.check_schema(schema)
+          validator = Draft202012Validator(schema)
+          expected = {
+              "simulate.json": ("simulate", "ok", 0),
+              "backtest.json": ("backtest", "ok", 0),
+              "evaluate.json": ("evaluate", "ok", 0),
+              "usage.json": ("simulate", "error", 2),
+          }
+          for name, wanted in expected.items():
+              with open(name, encoding="utf-8") as handle:
+                  document = json.load(handle)
+              validator.validate(document)
+              got = (document["command"], document["status"], document["exit_code"])
+              assert got == wanted, (name, got)
+          with open("simulate.json", encoding="utf-8") as handle:
+              assert json.load(handle)["config"]["seed"] == 42
+          PY
+
+      - name: Compare the seeded run with the committed golden result
+        env:
+          MPLBACKEND: Agg
+        run: pytest -q tests/test_cli_json.py -k "golden or schema_command"

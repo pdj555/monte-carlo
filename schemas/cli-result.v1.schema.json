@@ -1,0 +1,1831 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pdj555/monte-carlo/schemas/cli-result.v1.schema.json",
+  "title": "monte-carlo --json result",
+  "description": "The single document `monte-carlo simulate|backtest|evaluate --json` prints on stdout. exit_code equals the process exit code: 0 ok; 1 the command ran but produced no usable result; 2 the command line or its inputs were rejected, including price data that could not be loaded; 3 an internal error. Exit 4 means the document could not be written to stdout, so no document carries it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "command",
+    "status",
+    "exit_code",
+    "config",
+    "result",
+    "error"
+  ],
+  "properties": {
+    "schema": {
+      "const": "monte-carlo.cli-result.v1"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "command": {
+      "enum": [
+        "simulate",
+        "backtest",
+        "evaluate",
+        "help",
+        "version",
+        null
+      ]
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "failed",
+        "error"
+      ]
+    },
+    "exit_code": {
+      "enum": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    "config": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "result": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "error": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "message"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "usage",
+                "invalid_input",
+                "price_data",
+                "internal",
+                "no_results",
+                "failed_runs"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "const": 0
+          },
+          "error": {
+            "type": "null"
+          },
+          "result": {
+            "type": "object"
+          },
+          "command": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "const": 1
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "no_results",
+                  "failed_runs"
+                ]
+              }
+            }
+          },
+          "config": {
+            "type": "object"
+          },
+          "command": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "simulate"
+          },
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "evaluate"
+          },
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "backtest"
+          },
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "error"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "enum": [
+              2,
+              3
+            ]
+          },
+          "error": {
+            "type": "object"
+          },
+          "result": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "exit_code": {
+            "const": 3
+          }
+        },
+        "required": [
+          "exit_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "error": {
+            "properties": {
+              "kind": {
+                "const": "internal"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "exit_code": {
+            "const": 2
+          }
+        },
+        "required": [
+          "exit_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "error": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "usage",
+                  "invalid_input",
+                  "price_data"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "simulate"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/simulate_config"
+              }
+            ]
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/simulate_result"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "backtest"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/backtest_config"
+              }
+            ]
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/backtest_result"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "evaluate"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/evaluate_config"
+              }
+            ]
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/evaluate_result"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "simulate"
+          },
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "backtest"
+          },
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "evaluate"
+          },
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "help"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "type": "null"
+          },
+          "result": {
+            "$ref": "#/$defs/help_result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "version"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "type": "null"
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version"
+            ],
+            "properties": {
+              "version": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "simulate"
+          },
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "tickers": {
+                "minProperties": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "simulate"
+          },
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "tickers": {
+                "maxProperties": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "evaluate"
+          },
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "scorecard": {
+                "properties": {
+                  "failed_runs": {
+                    "const": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "evaluate"
+          },
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "scorecard": {
+                "properties": {
+                  "failed_runs": {
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "price_sources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "is_sample_data",
+          "kind",
+          "path",
+          "sha256",
+          "used_fallback"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "used_fallback": {
+            "type": "boolean"
+          },
+          "is_sample_data": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "mean",
+        "median",
+        "std",
+        "q05",
+        "q95",
+        "expected_return",
+        "prob_above_current",
+        "value_at_risk_95_pct",
+        "expected_shortfall_95_pct",
+        "max_drawdown_q95"
+      ],
+      "properties": {
+        "prob_above_current": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "prob_below_current": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "prob_beat_benchmark": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "prob_drawdown_10_pct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "prob_drawdown_20_pct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "prob_hit_target": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "prob_breach_max_loss": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "kelly_fraction": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": {
+        "type": [
+          "number",
+          "null"
+        ]
+      }
+    },
+    "simulate_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_path",
+        "days",
+        "model",
+        "reproduce",
+        "scenarios",
+        "seed",
+        "seed_source",
+        "source",
+        "tickers"
+      ],
+      "properties": {
+        "tickers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "scenarios": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "model": {
+          "enum": [
+            "historical",
+            "gbm"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "seed_source": {
+          "enum": [
+            "argument",
+            "generated"
+          ]
+        },
+        "source": {
+          "enum": [
+            "auto",
+            "offline",
+            "online"
+          ]
+        },
+        "data_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reproduce": {
+          "description": "argv that replays the numbers. It leaves out --output, --show and --details, which change what is saved or shown, not what is computed. The replay prints the same result and the same config except seed_source, which reads argument because the seed is now given.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 3
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25200
+        }
+      }
+    },
+    "backtest_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_path",
+        "hold",
+        "lookback",
+        "model",
+        "rebalance",
+        "reproduce",
+        "scenarios",
+        "seed",
+        "seed_source",
+        "source",
+        "tickers",
+        "top"
+      ],
+      "properties": {
+        "tickers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "scenarios": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "model": {
+          "enum": [
+            "historical",
+            "gbm"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "seed_source": {
+          "enum": [
+            "argument",
+            "generated"
+          ]
+        },
+        "source": {
+          "enum": [
+            "auto",
+            "offline",
+            "online"
+          ]
+        },
+        "data_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reproduce": {
+          "description": "argv that replays the numbers. It leaves out --output, --show and --details, which change what is saved or shown, not what is computed. The replay prints the same result and the same config except seed_source, which reads argument because the seed is now given.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 3
+        },
+        "lookback": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "rebalance": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "top": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "evaluate_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_sha256",
+        "reproduce",
+        "seeds",
+        "set_file"
+      ],
+      "properties": {
+        "set_file": {
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "seeds": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          }
+        },
+        "reproduce": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "simulate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_plan",
+        "allocation_portfolio_summary",
+        "allocations",
+        "errors",
+        "portfolio_summary",
+        "price_sources",
+        "rankings",
+        "tickers"
+      ],
+      "properties": {
+        "tickers": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/summary"
+          }
+        },
+        "portfolio_summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/summary"
+            }
+          ]
+        },
+        "allocation_portfolio_summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/summary"
+            }
+          ]
+        },
+        "rankings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "expected_return",
+              "guardrail_reasons",
+              "prob_above_current",
+              "recommendation",
+              "score",
+              "value_at_risk_95_pct"
+            ],
+            "properties": {
+              "score": {
+                "type": "number"
+              },
+              "expected_return": {
+                "type": "number"
+              },
+              "prob_above_current": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "value_at_risk_95_pct": {
+                "type": "number"
+              },
+              "kelly_fraction": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "max_drawdown_q95": {
+                "type": "number"
+              },
+              "expected_shortfall_95_pct": {
+                "type": "number"
+              },
+              "expected_excess_return": {
+                "type": "number"
+              },
+              "prob_beat_benchmark": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "prob_hit_target": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "prob_breach_max_loss": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "recommendation": {
+                "enum": [
+                  "BUY",
+                  "WATCH",
+                  "AVOID"
+                ]
+              },
+              "guardrail_reasons": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "allocations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "score",
+              "value_at_risk_95_pct",
+              "weight"
+            ],
+            "properties": {
+              "weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "score": {
+                "type": "number"
+              },
+              "value_at_risk_95_pct": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "action_plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "avoid_list",
+            "cash_weight",
+            "focus_list",
+            "headline",
+            "primary_pick",
+            "stance"
+          ],
+          "properties": {
+            "stance": {
+              "enum": [
+                "RISK_ON",
+                "SELECTIVE",
+                "DEFENSIVE",
+                "NO_TRADE"
+              ]
+            },
+            "headline": {
+              "type": "string",
+              "minLength": 1
+            },
+            "primary_pick": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "expected_return",
+                    "prob_above_current",
+                    "score",
+                    "ticker",
+                    "value_at_risk_95_pct",
+                    "weight"
+                  ],
+                  "properties": {
+                    "ticker": {
+                      "type": "string"
+                    },
+                    "weight": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "score": {
+                      "type": "number"
+                    },
+                    "expected_return": {
+                      "type": "number"
+                    },
+                    "prob_above_current": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "value_at_risk_95_pct": {
+                      "type": "number"
+                    }
+                  }
+                }
+              ]
+            },
+            "focus_list": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "avoid_list": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "cash_weight": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "price_sources": {
+          "$ref": "#/$defs/price_sources"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "error",
+              "kind",
+              "ticker"
+            ],
+            "properties": {
+              "ticker": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "price_data",
+                  "insufficient_history",
+                  "ai_summary"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "backtest_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "equity_curve",
+        "price_sources",
+        "rebalance_log",
+        "summary"
+      ],
+      "properties": {
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "average_turnover",
+            "cash_total_return",
+            "equal_weight_total_return",
+            "excess_return_t_stat",
+            "excess_return_vs_cash",
+            "excess_return_vs_equal_weight",
+            "periods",
+            "strategy_annualized_return",
+            "strategy_max_drawdown",
+            "strategy_total_return",
+            "strategy_win_rate",
+            "total_transaction_cost_drag",
+            "years"
+          ],
+          "properties": {
+            "periods": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "years": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "strategy_total_return": {
+              "type": "number"
+            },
+            "strategy_annualized_return": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "strategy_max_drawdown": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "strategy_win_rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "average_turnover": {
+              "type": "number",
+              "minimum": 0
+            },
+            "total_transaction_cost_drag": {
+              "type": "number",
+              "minimum": 0
+            },
+            "equal_weight_total_return": {
+              "type": "number"
+            },
+            "cash_total_return": {
+              "type": "number"
+            },
+            "excess_return_vs_equal_weight": {
+              "type": "number"
+            },
+            "excess_return_vs_cash": {
+              "type": "number"
+            },
+            "excess_return_t_stat": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "rebalance_log": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "cash_return",
+              "cash_weight",
+              "end_date",
+              "equal_weight_return",
+              "holding_days",
+              "rebalance_date",
+              "selected_tickers",
+              "selected_weights",
+              "selection_count",
+              "strategy_return_gross",
+              "strategy_return_net",
+              "transaction_cost_drag",
+              "turnover"
+            ],
+            "properties": {
+              "rebalance_date": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?([+-][0-9]{2}:[0-9]{2})?)?$"
+              },
+              "end_date": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?([+-][0-9]{2}:[0-9]{2})?)?$"
+              },
+              "holding_days": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "selection_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "selected_tickers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "selected_weights": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "cash_weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "turnover": {
+                "type": "number",
+                "minimum": 0
+              },
+              "transaction_cost_drag": {
+                "type": "number",
+                "minimum": 0
+              },
+              "strategy_return_gross": {
+                "type": "number"
+              },
+              "strategy_return_net": {
+                "type": "number"
+              },
+              "equal_weight_return": {
+                "type": "number"
+              },
+              "cash_return": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "equity_curve": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "cash",
+              "date",
+              "equal_weight",
+              "strategy"
+            ],
+            "properties": {
+              "date": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?([+-][0-9]{2}:[0-9]{2})?)?$"
+              },
+              "strategy": {
+                "type": "number"
+              },
+              "equal_weight": {
+                "type": "number"
+              },
+              "cash": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "price_sources": {
+          "$ref": "#/$defs/price_sources"
+        }
+      }
+    },
+    "evaluate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluation_set",
+        "outcomes",
+        "runs",
+        "scorecard"
+      ],
+      "properties": {
+        "evaluation_set": {
+          "type": "object",
+          "required": [
+            "name",
+            "days",
+            "scenarios",
+            "models",
+            "seeds",
+            "manifest_sha256"
+          ],
+          "properties": {
+            "seeds": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            },
+            "manifest_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "data_path",
+              "days",
+              "model",
+              "run_id",
+              "scenarios",
+              "seed",
+              "source_mode",
+              "source_name",
+              "tickers",
+              "universe_name"
+            ],
+            "properties": {
+              "run_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "universe_name": {
+                "type": "string"
+              },
+              "model": {
+                "enum": [
+                  "historical",
+                  "gbm"
+                ]
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              },
+              "source_name": {
+                "type": "string"
+              },
+              "source_mode": {
+                "enum": [
+                  "auto",
+                  "offline",
+                  "online"
+                ]
+              },
+              "tickers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "data_path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "scenarios": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        "outcomes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "completed_tickers",
+              "error",
+              "guardrail_rejections",
+              "model",
+              "rank_order",
+              "requested_tickers",
+              "run_id",
+              "seed",
+              "source_mode",
+              "source_name",
+              "stance",
+              "status",
+              "top_pick",
+              "universe_name",
+              "worst_var_95_pct"
+            ],
+            "properties": {
+              "run_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "universe_name": {
+                "type": "string"
+              },
+              "model": {
+                "enum": [
+                  "historical",
+                  "gbm"
+                ]
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              },
+              "source_name": {
+                "type": "string"
+              },
+              "source_mode": {
+                "enum": [
+                  "auto",
+                  "offline",
+                  "online"
+                ]
+              },
+              "requested_tickers": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "completed_tickers": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "status": {
+                "enum": [
+                  "completed",
+                  "failed"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stance": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "top_pick": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rank_order": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "guardrail_rejections": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "worst_var_95_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "scorecard": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "completed_runs",
+            "failed_runs",
+            "guardrail_rejection_rate",
+            "mean_rank_correlation",
+            "no_trade_rate",
+            "run_success_rate",
+            "source_reliability",
+            "ticker_success_rate",
+            "top_pick_consistency",
+            "total_runs",
+            "worst_var_95_pct"
+          ],
+          "properties": {
+            "total_runs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "completed_runs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed_runs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "run_success_rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "ticker_success_rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "mean_rank_correlation": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": -1,
+              "maximum": 1
+            },
+            "top_pick_consistency": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "guardrail_rejection_rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "no_trade_rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "worst_var_95_pct": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "source_reliability": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "completed_runs",
+                  "failed_runs",
+                  "run_success_rate",
+                  "total_runs"
+                ],
+                "properties": {
+                  "total_runs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "completed_runs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "failed_runs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "run_success_rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "help_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "commands",
+        "exit_codes",
+        "help",
+        "limits",
+        "usage"
+      ],
+      "properties": {
+        "command": {
+          "enum": [
+            "simulate",
+            "backtest",
+            "evaluate",
+            "schema",
+            null
+          ]
+        },
+        "usage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "help": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "exit_codes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          "properties": {
+            "0": {
+              "type": "string"
+            },
+            "1": {
+              "type": "string"
+            },
+            "2": {
+              "type": "string"
+            },
+            "3": {
+              "type": "string"
+            },
+            "4": {
+              "type": "string"
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "max_days",
+            "max_path_cells",
+            "max_scenarios",
+            "max_seed"
+          ],
+          "properties": {
+            "max_scenarios": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_days": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_path_cells": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_seed": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

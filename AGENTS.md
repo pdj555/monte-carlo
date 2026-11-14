@@ -49,6 +49,53 @@ npm run build
 
 Tip: set `MPLBACKEND=Agg` in headless environments and leave `--show` off unless you want plots on screen.
 
+## For agents
+
+Run from a source checkout. Every command below is offline and uses `sample_data/`.
+
+```bash
+python3 -m pip install -e '.[dev]'
+
+monte-carlo simulate AAPL MSFT --source offline --data-path sample_data --days 5 --scenarios 100 --seed 42 --json
+monte-carlo backtest AAPL MSFT --source offline --data-path sample_data --lookback 5 --hold 3 --top 1 --scenarios 100 --seed 42 --json
+monte-carlo evaluate evaluation_sets/sample-stability.json --json
+
+pytest -q
+flake8 .
+```
+
+- `--json` prints one JSON document on stdout; logs go to stderr. It may be written before or after the command. `monte-carlo --json` with no command exits `2` with a usage document. With `--json`, `--help` and `--version` print a document too (`command` is `help` or `version`), and `schema --json` is accepted. `monte-carlo schema` prints the document's JSON Schema, also from an installed package; the same schema is committed as `schemas/cli-result.v1.schema.json`.
+- Exit codes, the same with and without `--json`; `exit_code` in the document equals the process exit code:
+
+  | Code | Meaning |
+  | --- | --- |
+  | `0` | ok |
+  | `1` | ran, but no usable result: prices loaded but are too short to simulate or to form one backtest period, or an evaluation run failed for a reason other than missing price data |
+  | `2` | the command line or its inputs were rejected, including price data that could not be loaded (unknown ticker, missing `--data-path`, no `Close` column, a duplicate date, or a price that is missing, not a number, not finite, zero or negative) in `simulate`, `backtest`, or any `evaluate` run; the document has `error` and no `result` |
+  | `3` | internal error (`error.kind` is `internal`): any exception that is not a rejected input, including a `ValueError` or `OSError` from inside the engine |
+  | `4` | stdout could not be written (reader closed the pipe, device full, descriptor closed); one line on stderr, no document |
+
+- `simulate` skips a ticker whose prices cannot be loaded and reports it in `result.errors`; it exits `2` only when no ticker loaded. `backtest` needs every ticker and exits `2` if any is missing.
+- Limits: `--scenarios` at most 1000000, `--days` at most 25200, `--days` x `--scenarios` at most 50000000 for `simulate`, and `--seed` from 0 to 4294967295. Integers are plain ASCII digits (`42`, not `4_2`, `+42` or `42.0`). An `evaluate` manifest is held to the same limits. Above them the exit code is `2`.
+- `config` holds the seed and every setting of the run, with `data_path` made absolute. Without `--seed`, one is drawn and reported (`seed_source: "generated"`). Same seed, settings, and price files give the same bytes; `result.price_sources` carries each local file's absolute path and SHA-256.
+- `config.reproduce` is the argv that replays the numbers from any directory. It leaves out `--output`, `--show`, and `--details`, which change what is saved or shown, not what is computed. The replay prints the same `result` and the same `config` except `seed_source`, which reads `argument` because the seed is now given.
+- CI installs `requirements.lock.txt` first (Python 3.9 to 3.12) and compares a seeded run with `tests/golden/simulate-seed42.json`; do the same to match its numbers exactly.
+- Dates in a backtest are `YYYY-MM-DD` for daily prices and ISO 8601 date-times (`2024-01-02T14:30:00`) when the price file is intraday.
+- A character the terminal cannot encode (an accented ticker under an ASCII locale) is written as an escape such as `\xc5`, not treated as a write failure.
+
+Behaviour changes against `main`, which apply without `--json` too:
+
+- `simulate` where no ticker's prices load: exit `1` -> `2`.
+- `backtest` with too little history for one period: exit `2` -> `1`, and stderr says "No usable result".
+- An exception from inside the engine, `ValueError` included: exit `2` -> `3`, and stderr says "Internal error".
+- `evaluate` where a run names a ticker with no price data: exit `1` -> `2`.
+- New upper bounds on `--seed`, `--days`, `--scenarios` (and the same in an `evaluate` manifest); integers must be plain ASCII digits.
+- Price files are checked strictly. A row whose price is missing, not a number, not finite, zero or negative, a duplicate date, or a file without a `Close` (or `Adj Close`) column is rejected; such rows used to be dropped silently, and a lone numeric column used to be taken as the price. In `simulate` that ticker is now skipped and listed in the errors, even next to a good one; `backtest` stops.
+- Each entry of `errors` in the saved `report.json` gains a `kind`.
+- Option abbreviations are rejected: `--scen 100` used to mean `--scenarios 100` and is now a usage error. Write options in full.
+- A closed or full stdout exits `4` instead of ending in a traceback.
+- Otherwise the text output of a successful run is the same as on `main`. `monte-carlo` with no subcommand still prints help and exits `1`.
+
 ## Coding Style & Naming Conventions
 
 - Follow `docs/constitution.md`: keep changes small, readable, and well-tested.

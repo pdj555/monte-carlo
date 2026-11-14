@@ -20,7 +20,8 @@ from analysis import (
     summarize_final_prices,
     summarize_weighted_portfolio,
 )
-from data import PriceDataError, fetch_prices, get_price_source
+from cli_shared import InputError
+from data import PriceDataError, fetch_prices, get_price_source, require_positive_prices
 from decision import (
     apply_risk_guards,
     build_action_plan,
@@ -102,7 +103,7 @@ def build_simulation_args(**overrides: object) -> argparse.Namespace:
 def _normalise_tickers(ticker_arg: str) -> list[str]:
     requested = [ticker.strip().upper() for ticker in ticker_arg.split(",") if ticker.strip()]
     if not requested:
-        raise ValueError("No valid tickers were supplied. Provide at least one ticker symbol.")
+        raise InputError("No valid tickers were supplied. Provide at least one ticker symbol.")
 
     tickers: list[str] = []
     seen: set[str] = set()
@@ -176,7 +177,7 @@ def _simulate_tickers(
     if len(tickers) > 1 and args.model in {"historical", "gbm"}:
         frame = pd.concat(returns_by_ticker, axis=1, join="inner")
         if len(frame.index) < 2:
-            raise ValueError(
+            raise InputError(
                 "The tickers share fewer than two trading days, so they cannot be simulated "
                 "together. Use a date range they all cover."
             )
@@ -423,10 +424,11 @@ def run(
                     cache_dir=cache_dir,
                     refresh_cache=args.refresh_cache,
                 )
+                require_positive_prices(ticker, prices)
             except PriceDataError as exc:
                 message = str(exc)
                 LOGGER.warning("[%s] %s", ticker, message)
-                errors.append({"ticker": ticker, "error": message})
+                errors.append({"ticker": ticker, "error": message, "kind": "price_data"})
                 continue
 
             source_info = get_price_source(prices)
@@ -440,7 +442,9 @@ def run(
                     "Try a longer price history."
                 )
                 LOGGER.warning("[%s] %s", ticker, message)
-                errors.append({"ticker": ticker, "error": message})
+                errors.append(
+                    {"ticker": ticker, "error": message, "kind": "insufficient_history"}
+                )
                 continue
 
             current_price = float(prices.iloc[-1])
@@ -476,7 +480,7 @@ def run(
             except (OpenAIConfigurationError, OpenAIRequestError) as exc:
                 message = str(exc)
                 LOGGER.error("[%s] %s", ticker, message)
-                errors.append({"ticker": ticker, "error": message})
+                errors.append({"ticker": ticker, "error": message, "kind": "ai_summary"})
             else:
                 ai_summaries[ticker] = ai_text
 
