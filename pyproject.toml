@@ -7,9 +7,15 @@ name = "monte-carlo-sim"
 version = "0.1.0"
 description = "Monte Carlo decision engine with a Next.js workbench, simulation, backtesting, and provenance-aware outputs."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.13"
 license = { file = "LICENSE" }
 authors = [{ name = "Preston Jones" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
 dependencies = [
   "matplotlib",
   "numpy",
@@ -19,7 +25,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["flake8", "jsonschema>=4.18", "pytest", "setuptools>=69", "wheel"]
+dev = ["flake8", "jsonschema>=4.18", "pytest", "ruff", "setuptools>=69", "wheel"]
 ui = []
 
 [project.scripts]
@@ -28,3 +34,11 @@ monte-carlo-ui = "web_entrypoint:main"
 
 [tool.setuptools]
 py-modules = ["analysis", "ai", "backtest", "cli", "cli_json", "cli_schema", "cli_shared", "data", "decision", "evaluation", "legacy_cli", "public_cli", "simulate_cli", "simulation", "ui_bridge", "ui_state", "viz", "web_entrypoint"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = ["build", "results"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "UP"]
