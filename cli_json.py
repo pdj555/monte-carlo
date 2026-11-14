@@ -196,11 +196,15 @@ def backtest_config(args: argparse.Namespace, *, seed_source: str) -> dict[str, 
 
 def evaluate_config(args: argparse.Namespace, report_dict: Mapping[str, Any]) -> dict[str, Any]:
     evaluation_set = report_dict.get("evaluation_set", {})
+    # The path the manifest was actually read from, absolute, so the replay
+    # works from any directory.
+    resolved = evaluation_set.get("manifest_path")
+    set_file = str(resolved or Path(args.set_file).expanduser().resolve())
     return {
-        "set_file": str(args.set_file),
+        "set_file": set_file,
         "manifest_sha256": evaluation_set.get("manifest_sha256"),
         "seeds": to_jsonable(evaluation_set.get("seeds", [])),
-        "reproduce": ["monte-carlo", "evaluate", str(args.set_file), "--json"],
+        "reproduce": ["monte-carlo", "evaluate", set_file, "--json"],
     }
 
 

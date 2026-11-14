@@ -819,3 +819,18 @@ def test_reproduce_replays_from_another_directory(tmp_path, seeded_simulate, val
     replay = _document(_run(*reproduce[1:], cwd=tmp_path), validator)
     assert replay["result"]["tickers"] == document["result"]["tickers"]
     assert replay["config"]["reproduce"] == reproduce
+
+
+def test_evaluate_reproduce_replays_from_another_directory(tmp_path, validator):
+    completed = _run("evaluate", "evaluation_sets/sample-stability.json", "--json")
+    first = _document(completed, validator)
+    config = first["config"]
+    manifest = (REPO_ROOT / "evaluation_sets" / "sample-stability.json").resolve()
+
+    assert config["set_file"] == str(manifest)
+    assert config["reproduce"] == ["monte-carlo", "evaluate", str(manifest), "--json"]
+    replayed = _run(*config["reproduce"][1:], cwd=tmp_path)
+    assert replayed.returncode == 0, replayed.stderr
+    replay = _document(replayed, validator)
+    assert replay["config"] == config
+    assert replay["result"] == first["result"]
