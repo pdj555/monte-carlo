@@ -6,6 +6,7 @@ import argparse
 import contextlib
 import io
 import logging
+import sys
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -36,11 +37,41 @@ from simulate_cli import (
 
 LOGGER = logging.getLogger(__name__)
 
+EXIT_USAGE = 2
+
+JSON_FLAG_HELP = (
+    "Print one JSON document on stdout instead of text "
+    "(schema: schemas/cli-result.v1.schema.json)."
+)
+
+
+class PublicUsageError(Exception):
+    """A command line the parser rejected."""
+
+    def __init__(self, parser: argparse.ArgumentParser, message: str) -> None:
+        super().__init__(message)
+        self.parser = parser
+        self.message = message
+
+
+class _PublicArgumentParser(argparse.ArgumentParser):
+    """Raise on bad usage so ``main`` can answer in the caller's format."""
+
+    def error(self, message: str) -> None:  # type: ignore[override]
+        raise PublicUsageError(self, message)
+
+
+def _exit_with_usage(exc: PublicUsageError) -> None:
+    """Report a usage error the way argparse does: usage on stderr, exit 2."""
+
+    exc.parser.print_usage(sys.stderr)
+    exc.parser.exit(EXIT_USAGE, f"{exc.parser.prog}: error: {exc.message}\n")
+
 
 def build_public_parser() -> argparse.ArgumentParser:
     """Create the simplified public CLI parser."""
 
-    parser = argparse.ArgumentParser(
+    parser = _PublicArgumentParser(
         prog="monte-carlo",
         description="Monte Carlo tools for current ideas and historical validation.",
         formatter_class=IntentionalDefaultsHelpFormatter,
@@ -122,6 +153,8 @@ def build_public_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print tables and secondary metrics.",
     )
+
+    simulate_parser.add_argument("--json", action="store_true", help=JSON_FLAG_HELP)
 
     backtest_parser = subparsers.add_parser(
         "backtest",
@@ -206,6 +239,8 @@ def build_public_parser() -> argparse.ArgumentParser:
         help="Print tables and secondary metrics.",
     )
 
+    backtest_parser.add_argument("--json", action="store_true", help=JSON_FLAG_HELP)
+
     evaluate_parser = subparsers.add_parser(
         "evaluate",
         help="Test decision stability across a reproducible scenario set.",
@@ -220,6 +255,8 @@ def build_public_parser() -> argparse.ArgumentParser:
         default=None,
         help="Directory for scorecard.md, runs.csv, and report.json.",
     )
+
+    evaluate_parser.add_argument("--json", action="store_true", help=JSON_FLAG_HELP)
 
     return parser
 
@@ -237,7 +274,10 @@ def _parse_public_args_with_parser(
 def parse_public_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     """Return parsed arguments for the public CLI."""
 
-    _, args = _parse_public_args_with_parser(argv)
+    try:
+        _, args = _parse_public_args_with_parser(argv)
+    except PublicUsageError as exc:
+        _exit_with_usage(exc)
     return args
 
 
@@ -617,10 +657,121 @@ def run_public_evaluate(args: argparse.Namespace) -> EvaluationReport:
     return report
 
 
-def main(argv: Optional[Iterable[str]] = None) -> int:
-    """Entrypoint for the public ``monte-carlo`` command."""
+def _emit_json(document: dict[str, Any]) -> int:
+    import cli_json
 
-    parser, args = _parse_public_args_with_parser(argv)
+    print(cli_json.render_document(document))
+    return int(document["exit_code"])
+
+
+def _run_json_command(args: argparse.Namespace) -> int:
+    """Run one command and print its result as a single JSON document."""
+
+    # Imported here, not at module top: the web bridge imports this module and
+    # never asks for JSON, so its import graph stays exactly as it was.
+    import cli_json
+
+    command = str(args.command)
+    config: dict[str, Any] | None = None
+    try:
+        if command == "simulate":
+            config = cli_json.simulate_config(args, seed_source=cli_json.resolve_seed(args))
+            legacy_args = _build_public_simulate_legacy_args(args)
+            result = execute_public_simulate(args)
+            maybe_show_simulation_plots(legacy_args, result)
+            failed = bool(result["summaries"].empty)
+            if failed:
+                _log_no_simulation_output(args=args, result=result)
+            return _emit_json(
+                cli_json.build_document(
+                    command=command,
+                    exit_code=cli_json.EXIT_FAILED if failed else cli_json.EXIT_OK,
+                    config=config,
+                    result=cli_json.simulate_result(result),
+                    error_kind="no_results" if failed else None,
+                    error_message=(
+                        "No ticker produced a simulation; see result.errors." if failed else None
+                    ),
+                )
+            )
+        if command == "backtest":
+            config = cli_json.backtest_config(args, seed_source=cli_json.resolve_seed(args))
+            return _emit_json(
+                cli_json.build_document(
+                    command=command,
+                    exit_code=cli_json.EXIT_OK,
+                    config=config,
+                    result=cli_json.backtest_result(execute_public_backtest(args)),
+                )
+            )
+        report = execute_public_evaluate(args)
+        if args.output:
+            save_evaluation_report(report, args.output)
+        report_dict = report.to_dict()
+        failed_runs = int(report.scorecard.failed_runs)
+        return _emit_json(
+            cli_json.build_document(
+                command=command,
+                exit_code=cli_json.EXIT_FAILED if failed_runs > 0 else cli_json.EXIT_OK,
+                config=cli_json.evaluate_config(args, report_dict),
+                result=cli_json.evaluate_result(report_dict),
+                error_kind="failed_runs" if failed_runs > 0 else None,
+                error_message=(
+                    f"{failed_runs} evaluation run(s) failed; see result.outcomes."
+                    if failed_runs > 0
+                    else None
+                ),
+            )
+        )
+    except Exception as exc:
+        _log_public_error(exc, command=command, args=args)
+        return _emit_json(
+            cli_json.build_document(
+                command=command,
+                exit_code=cli_json.EXIT_USAGE,
+                config=config,
+                error_kind=(
+                    "price_data"
+                    if isinstance(exc, PriceDataError)
+                    else "invalid_input" if isinstance(exc, ValueError) else "internal"
+                ),
+                error_message=str(exc) or type(exc).__name__,
+            )
+        )
+
+
+def _requested_command(argv: list[str]) -> str | None:
+    for token in argv:
+        if token in {"simulate", "backtest", "evaluate"}:
+            return token
+    return None
+
+
+def main(argv: Optional[Iterable[str]] = None) -> int:
+    """Entrypoint for the public ``monte-carlo`` command.
+
+    Exit codes: 0 the command succeeded; 1 it ran but produced no usable result
+    (no ticker simulated, or an evaluation run failed); 2 the command line or
+    its inputs were rejected.
+    """
+
+    raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    try:
+        parser, args = _parse_public_args_with_parser(raw_argv)
+    except PublicUsageError as exc:
+        if "--json" not in raw_argv:
+            _exit_with_usage(exc)
+        import cli_json
+
+        exc.parser.print_usage(sys.stderr)
+        return _emit_json(
+            cli_json.build_document(
+                command=_requested_command(raw_argv),
+                exit_code=cli_json.EXIT_USAGE,
+                error_kind="usage",
+                error_message=exc.message,
+            )
+        )
     if args.command is None:
         parser.print_help()
         print(
@@ -629,6 +780,9 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         )
         return 1
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+    if args.json:
+        return _run_json_command(args)
 
     try:
         if args.command == "simulate":

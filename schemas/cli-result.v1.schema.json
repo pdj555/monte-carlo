@@ -1,0 +1,959 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pdj555/monte-carlo/schemas/cli-result.v1.schema.json",
+  "title": "monte-carlo --json result",
+  "description": "The single document `monte-carlo simulate|backtest|evaluate --json` prints on stdout. exit_code equals the process exit code: 0 ok, 1 the command ran but produced no usable result, 2 the command line or its inputs were rejected.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "command",
+    "status",
+    "exit_code",
+    "config",
+    "result",
+    "error"
+  ],
+  "properties": {
+    "schema": {
+      "const": "monte-carlo.cli-result.v1"
+    },
+    "version": {
+      "type": "string"
+    },
+    "command": {
+      "enum": [
+        "simulate",
+        "backtest",
+        "evaluate",
+        null
+      ]
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "failed",
+        "error"
+      ]
+    },
+    "exit_code": {
+      "enum": [
+        0,
+        1,
+        2
+      ]
+    },
+    "config": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "result": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "error": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "message"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "usage",
+                "invalid_input",
+                "price_data",
+                "internal",
+                "no_results",
+                "failed_runs"
+              ]
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ok"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "const": 0
+          },
+          "error": {
+            "type": "null"
+          },
+          "config": {
+            "type": "object"
+          },
+          "result": {
+            "type": "object"
+          },
+          "command": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "const": 1
+          },
+          "error": {
+            "type": "object"
+          },
+          "config": {
+            "type": "object"
+          },
+          "result": {
+            "type": "object"
+          },
+          "command": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "error"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "exit_code": {
+            "const": 2
+          },
+          "error": {
+            "type": "object"
+          },
+          "result": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "simulate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/simulate_config"
+              }
+            ]
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/simulate_result"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "backtest"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/backtest_config"
+              }
+            ]
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/backtest_result"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "evaluate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/evaluate_config"
+              }
+            ]
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/evaluate_result"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "price_sources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "path",
+          "sha256",
+          "used_fallback",
+          "is_sample_data"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "used_fallback": {
+            "type": "boolean"
+          },
+          "is_sample_data": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "mean",
+        "median",
+        "std",
+        "q05",
+        "q95",
+        "expected_return",
+        "prob_above_current",
+        "value_at_risk_95_pct",
+        "expected_shortfall_95_pct",
+        "max_drawdown_q95"
+      ],
+      "additionalProperties": {
+        "type": [
+          "number",
+          "null"
+        ]
+      }
+    },
+    "simulate_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_path",
+        "days",
+        "model",
+        "reproduce",
+        "scenarios",
+        "seed",
+        "seed_source",
+        "source",
+        "tickers"
+      ],
+      "properties": {
+        "tickers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "scenarios": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "model": {
+          "enum": [
+            "historical",
+            "gbm"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "seed_source": {
+          "enum": [
+            "argument",
+            "generated"
+          ]
+        },
+        "source": {
+          "enum": [
+            "auto",
+            "offline",
+            "online"
+          ]
+        },
+        "data_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reproduce": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 3
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "backtest_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_path",
+        "hold",
+        "lookback",
+        "model",
+        "rebalance",
+        "reproduce",
+        "scenarios",
+        "seed",
+        "seed_source",
+        "source",
+        "tickers",
+        "top"
+      ],
+      "properties": {
+        "tickers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "scenarios": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "model": {
+          "enum": [
+            "historical",
+            "gbm"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "seed_source": {
+          "enum": [
+            "argument",
+            "generated"
+          ]
+        },
+        "source": {
+          "enum": [
+            "auto",
+            "offline",
+            "online"
+          ]
+        },
+        "data_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reproduce": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 3
+        },
+        "lookback": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "rebalance": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "top": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "evaluate_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_sha256",
+        "reproduce",
+        "seeds",
+        "set_file"
+      ],
+      "properties": {
+        "set_file": {
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "seeds": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "reproduce": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "simulate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_plan",
+        "allocation_portfolio_summary",
+        "allocations",
+        "errors",
+        "portfolio_summary",
+        "price_sources",
+        "rankings",
+        "tickers"
+      ],
+      "properties": {
+        "tickers": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/summary"
+          }
+        },
+        "portfolio_summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/summary"
+            }
+          ]
+        },
+        "allocation_portfolio_summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/summary"
+            }
+          ]
+        },
+        "rankings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "score",
+              "expected_return",
+              "recommendation",
+              "guardrail_reasons"
+            ],
+            "properties": {
+              "score": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "expected_return": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "recommendation": {
+                "type": "string"
+              },
+              "guardrail_reasons": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "allocations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "weight"
+            ],
+            "properties": {
+              "weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        },
+        "action_plan": {
+          "type": "object",
+          "required": [
+            "stance",
+            "headline",
+            "primary_pick",
+            "focus_list",
+            "avoid_list"
+          ],
+          "properties": {
+            "stance": {
+              "type": "string"
+            },
+            "headline": {
+              "type": "string"
+            },
+            "primary_pick": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "focus_list": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "avoid_list": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "cash_weight": {
+              "type": "number"
+            }
+          }
+        },
+        "price_sources": {
+          "$ref": "#/$defs/price_sources"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "error",
+              "ticker"
+            ],
+            "properties": {
+              "ticker": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "backtest_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "equity_curve",
+        "price_sources",
+        "rebalance_log",
+        "summary"
+      ],
+      "properties": {
+        "summary": {
+          "type": "object",
+          "required": [
+            "periods",
+            "strategy_total_return",
+            "strategy_annualized_return",
+            "strategy_max_drawdown",
+            "equal_weight_total_return",
+            "cash_total_return",
+            "excess_return_vs_equal_weight",
+            "excess_return_vs_cash",
+            "excess_return_t_stat"
+          ],
+          "additionalProperties": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "rebalance_log": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "rebalance_date",
+              "end_date",
+              "holding_days",
+              "selected_tickers",
+              "selected_weights",
+              "cash_weight",
+              "strategy_return_net",
+              "equal_weight_return",
+              "cash_return"
+            ],
+            "properties": {
+              "rebalance_date": {
+                "type": "string"
+              },
+              "end_date": {
+                "type": "string"
+              },
+              "holding_days": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "selected_tickers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "selected_weights": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number"
+                }
+              },
+              "cash_weight": {
+                "type": "number"
+              },
+              "strategy_return_net": {
+                "type": "number"
+              },
+              "equal_weight_return": {
+                "type": "number"
+              },
+              "cash_return": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "equity_curve": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "cash",
+              "date",
+              "equal_weight",
+              "strategy"
+            ],
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "strategy": {
+                "type": "number"
+              },
+              "equal_weight": {
+                "type": "number"
+              },
+              "cash": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "price_sources": {
+          "$ref": "#/$defs/price_sources"
+        }
+      }
+    },
+    "evaluate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluation_set",
+        "outcomes",
+        "runs",
+        "scorecard"
+      ],
+      "properties": {
+        "evaluation_set": {
+          "type": "object",
+          "required": [
+            "name",
+            "days",
+            "scenarios",
+            "models",
+            "seeds",
+            "manifest_sha256"
+          ]
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "run_id",
+              "tickers",
+              "model",
+              "seed",
+              "days",
+              "scenarios"
+            ],
+            "properties": {
+              "run_id": {
+                "type": "string"
+              },
+              "tickers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "model": {
+                "type": "string"
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "outcomes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "run_id",
+              "model",
+              "seed",
+              "status",
+              "error",
+              "stance",
+              "top_pick",
+              "rank_order",
+              "guardrail_rejections",
+              "worst_var_95_pct"
+            ],
+            "properties": {
+              "run_id": {
+                "type": "string"
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "status": {
+                "type": "string"
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stance": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "top_pick": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rank_order": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "worst_var_95_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "scorecard": {
+          "type": "object",
+          "required": [
+            "total_runs",
+            "completed_runs",
+            "failed_runs",
+            "run_success_rate",
+            "ticker_success_rate",
+            "mean_rank_correlation",
+            "top_pick_consistency",
+            "guardrail_rejection_rate",
+            "no_trade_rate",
+            "worst_var_95_pct",
+            "source_reliability"
+          ],
+          "properties": {
+            "total_runs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "completed_runs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed_runs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "run_success_rate": {
+              "type": "number"
+            },
+            "ticker_success_rate": {
+              "type": "number"
+            },
+            "mean_rank_correlation": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "top_pick_consistency": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "guardrail_rejection_rate": {
+              "type": "number"
+            },
+            "no_trade_rate": {
+              "type": "number"
+            },
+            "worst_var_95_pct": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "source_reliability": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  }
+}

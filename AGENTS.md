@@ -49,6 +49,26 @@ npm run build
 
 Tip: set `MPLBACKEND=Agg` in headless environments and leave `--show` off unless you want plots on screen.
 
+## For agents
+
+Run from a source checkout. Every command below is offline and uses `sample_data/`.
+
+```bash
+python3 -m pip install -e '.[dev]'
+
+monte-carlo simulate AAPL MSFT --source offline --data-path sample_data --days 5 --scenarios 100 --seed 42 --json
+monte-carlo backtest AAPL MSFT --source offline --data-path sample_data --lookback 5 --hold 3 --top 1 --scenarios 100 --seed 42 --json
+monte-carlo evaluate evaluation_sets/sample-stability.json --json
+
+pytest -q
+flake8 .
+```
+
+- `--json` prints one JSON document on stdout; logs go to stderr. Its shape is `schemas/cli-result.v1.schema.json`.
+- `exit_code` in the document equals the process exit code: `0` ok; `1` the command ran but no ticker simulated or an evaluation run failed; `2` the command line or its inputs were rejected (the document then has `error` and no `result`).
+- `config` holds the seed and every setting of the run, and `config.reproduce` is the argv that replays it. Without `--seed`, one is drawn and reported (`seed_source: "generated"`). Same seed, settings, and price files give the same bytes; `result.price_sources` carries each local file's SHA-256.
+- Without `--json` the text output is unchanged. `monte-carlo` with no subcommand prints help and exits `1`.
+
 ## Coding Style & Naming Conventions
 
 - Follow `docs/constitution.md`: keep changes small, readable, and well-tested.

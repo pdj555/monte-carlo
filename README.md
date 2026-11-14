@@ -39,6 +39,8 @@ monte-carlo simulate AAPL --source offline --data-path sample_data
 monte-carlo evaluate evaluation_sets/sample-stability.json --output results/evaluation
 ```
 
+Add `--json` to any of the three commands for one JSON document on stdout; the contract is in [AGENTS.md](AGENTS.md#for-agents).
+
 `evaluate` gates a decision across seeds and models before capital is risked. The reference manifest and `sample_data/` are source-checkout assets and are not included in the installed wheel. Wheel users must supply their own evaluation-set JSON and local data paths.
 
 ## What it does
