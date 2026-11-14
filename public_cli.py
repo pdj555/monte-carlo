@@ -27,6 +27,7 @@ from cli_shared import (
     MAX_DAYS,
     MAX_PATH_CELLS,
     MAX_SCENARIOS,
+    MAX_SEED,
     IntentionalDefaultsHelpFormatter,
     InputError,
     bounded_positive_int,
@@ -328,10 +329,15 @@ def build_public_parser() -> argparse.ArgumentParser:
 
     evaluate_parser.add_argument("--json", action="store_true", help=JSON_FLAG_HELP)
 
-    subparsers.add_parser(
+    schema_parser = subparsers.add_parser(
         "schema",
         allow_abbrev=False,
         help="Print the JSON Schema of the --json document.",
+    )
+    schema_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Accepted for symmetry; the schema is always printed as JSON.",
     )
 
     return parser
@@ -492,12 +498,16 @@ def _log_public_error(exc: Exception, *, command: str, args: argparse.Namespace)
             )
         return
 
-    if isinstance(exc, ValueError):
+    exit_code, _ = _classify_exception(exc)
+    if exit_code == EXIT_FAILED:
+        LOGGER.error("No usable result for %s: %s", command, exc)
+        return
+    if exit_code == EXIT_USAGE:
         LOGGER.error("Invalid input for %s: %s", command, exc)
         LOGGER.error("Use `%s --help` to check valid flags and defaults.", command)
         return
 
-    LOGGER.error("%s", exc)
+    LOGGER.error("Internal error in %s: %s: %s", command, type(exc).__name__, exc)
 
 
 def _log_no_simulation_output(
@@ -910,8 +920,8 @@ def _requested_command(argv: list[str]) -> str | None:
     return None
 
 
-def _json_requested(argv: list[str]) -> bool:
-    """Whether a command line the parser rejected asked for JSON.
+def _probe(argv: list[str]) -> argparse.Namespace:
+    """Read --json, --help and --version from a command line without running it.
 
     Decided by argparse, not by looking for the text: ``--json`` after ``--``
     is a ticker, and an abbreviation is not the flag.
@@ -919,14 +929,68 @@ def _json_requested(argv: list[str]) -> bool:
 
     probe = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     probe.add_argument("--json", action="store_true")
+    probe.add_argument("-h", "--help", action="store_true")
+    probe.add_argument("--version", action="store_true")
     try:
         known, _ = probe.parse_known_args(argv)
     except SystemExit:
-        return False
-    return bool(known.json)
+        return argparse.Namespace(json=False, help=False, version=False)
+    return known
+
+
+def _json_requested(argv: list[str]) -> bool:
+    """Whether a command line the parser rejected asked for JSON."""
+
+    return bool(_probe(argv).json)
+
+
+EXIT_CODE_MEANINGS = {
+    str(EXIT_OK): "ok",
+    str(EXIT_FAILED): "ran, but produced no usable result",
+    str(EXIT_USAGE): "the command line or its inputs were rejected",
+    str(EXIT_INTERNAL): "internal error",
+    str(EXIT_OUTPUT): "stdout could not be written",
+}
+
+
+def _describe_program(raw_argv: list[str], *, version_only: bool) -> int:
+    """Answer --help or --version as a JSON document instead of text."""
+
+    import cli_json
+
+    if version_only:
+        result: dict[str, Any] = {"version": package_version()}
+        return _emit_json(
+            cli_json.build_document(command="version", exit_code=EXIT_OK, result=result)
+        )
+    parser = build_public_parser()
+    subcommands = next(
+        action.choices
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    )
+    named = next((token for token in raw_argv if token in subcommands), None)
+    described = subcommands[named] if named else parser
+    result = {
+        "command": named,
+        "usage": described.format_usage().strip(),
+        "help": described.format_help(),
+        "commands": list(subcommands),
+        "exit_codes": dict(EXIT_CODE_MEANINGS),
+        "limits": {
+            "max_scenarios": MAX_SCENARIOS,
+            "max_days": MAX_DAYS,
+            "max_path_cells": MAX_PATH_CELLS,
+            "max_seed": MAX_SEED,
+        },
+    }
+    return _emit_json(cli_json.build_document(command="help", exit_code=EXIT_OK, result=result))
 
 
 def _run(raw_argv: list[str]) -> int:
+    probe = _probe(raw_argv)
+    if probe.json and (probe.help or probe.version):
+        return _describe_program(raw_argv, version_only=bool(probe.version and not probe.help))
     try:
         parser, args = _parse_public_args_with_parser(raw_argv)
     except PublicUsageError as exc:
@@ -1003,6 +1067,15 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     """
 
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    # A character the terminal's encoding lacks (a ticker with an accent under
+    # an ASCII locale) is written as an escape instead of failing the write.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(errors="backslashreplace")
+            except Exception:
+                pass
     guard = _GuardedStdout(sys.stdout)
     try:
         with contextlib.redirect_stdout(guard):  # type: ignore[type-var]

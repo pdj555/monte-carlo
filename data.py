@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 import yfinance as yf
 
@@ -47,13 +48,18 @@ def _with_price_source(
 
 
 def require_positive_prices(ticker: str, prices: pd.Series) -> None:
-    """Reject a price series with a zero or negative price.
+    """Reject a price series with a zero, negative, missing or infinite price.
 
-    A return cannot be computed from a price of zero, so such a file is bad
-    input, not a short history.
+    A return cannot be computed from such a price, so the file is bad input,
+    not a short history.
     """
 
-    values = pd.to_numeric(prices, errors="coerce").dropna()
+    values = pd.to_numeric(prices, errors="coerce").to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        raise PriceDataError(
+            f"Price data for '{ticker}' contains a missing or infinite price. "
+            "Every Close value must be a finite number."
+        )
     if (values <= 0).any():
         raise PriceDataError(
             f"Price data for '{ticker}' contains a zero or negative price. "
@@ -151,21 +157,25 @@ def _load_prices_from_csv(path: Path) -> pd.Series:
             break
 
     if close_column is None:
-        numeric_candidates = [
-            col
-            for col in df.columns
-            if col != date_column and pd.api.types.is_numeric_dtype(df[col])
-        ]
-        if len(numeric_candidates) == 1:
-            close_column = numeric_candidates[0]
-
-    if close_column is None:
         raise PriceDataError(
             f"CSV at '{path}' is missing a Close column. "
             "Add a 'Close' or 'Adj Close' column."
         )
 
-    series = pd.to_numeric(df[close_column], errors="coerce").dropna()
+    # A bad row is rejected, not dropped: silently thinning a price history
+    # changes every statistic computed from it.
+    series = pd.to_numeric(df[close_column], errors="coerce")
+    unusable = int((~np.isfinite(series.to_numpy(dtype=float))).sum())
+    if unusable:
+        raise PriceDataError(
+            f"CSV at '{path}' has {unusable} {close_column} value(s) that are missing, "
+            "not a number, or not finite. Every row needs a finite numeric price."
+        )
+    duplicated = int(series.index.duplicated().sum())
+    if duplicated:
+        raise PriceDataError(
+            f"CSV at '{path}' repeats {duplicated} date(s). Keep one row per date."
+        )
     series.name = "Close"
     if series.empty:
         raise PriceDataError(

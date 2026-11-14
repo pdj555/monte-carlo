@@ -366,6 +366,32 @@ def _result_type_rule(command: str, status: str, json_type: str) -> dict[str, An
     )
 
 
+def _config_type_rule(command: str, json_type: str) -> dict[str, Any]:
+    return _when(
+        {"command": command, "status": "ok"},
+        {"properties": {"config": {"type": json_type}}},
+    )
+
+
+_HELP_RESULT = _closed(
+    {
+        "command": {"enum": ["simulate", "backtest", "evaluate", "schema", None]},
+        "usage": {"type": "string", "minLength": 1},
+        "help": {"type": "string", "minLength": 1},
+        "commands": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "exit_codes": _closed({str(code): {"type": "string"} for code in range(5)}),
+        "limits": _closed(
+            {
+                "max_scenarios": _POSITIVE,
+                "max_days": _POSITIVE,
+                "max_path_cells": _POSITIVE,
+                "max_seed": _POSITIVE,
+            }
+        ),
+    }
+)
+
+
 SCHEMA: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://github.com/pdj555/monte-carlo/schemas/cli-result.v1.schema.json",
@@ -392,7 +418,7 @@ SCHEMA: dict[str, Any] = {
     "properties": {
         "schema": {"const": SCHEMA_ID},
         "version": {"type": "string", "minLength": 1},
-        "command": {"enum": ["simulate", "backtest", "evaluate", None]},
+        "command": {"enum": ["simulate", "backtest", "evaluate", "help", "version", None]},
         "status": {"enum": ["ok", "failed", "error"]},
         "exit_code": {"enum": [0, 1, 2, 3]},
         "config": {"type": ["object", "null"]},
@@ -425,7 +451,6 @@ SCHEMA: dict[str, Any] = {
                 "properties": {
                     "exit_code": {"const": 0},
                     "error": {"type": "null"},
-                    "config": {"type": "object"},
                     "result": {"type": "object"},
                     "command": {"type": "string"},
                 }
@@ -476,6 +501,23 @@ SCHEMA: dict[str, Any] = {
         _command_rule("simulate"),
         _command_rule("backtest"),
         _command_rule("evaluate"),
+        _config_type_rule("simulate", "object"),
+        _config_type_rule("backtest", "object"),
+        _config_type_rule("evaluate", "object"),
+        # --json with --help or --version describes the program; nothing was run.
+        _when(
+            {"command": "help"},
+            {"properties": {"config": {"type": "null"}, "result": {"$ref": "#/$defs/help_result"}}},
+        ),
+        _when(
+            {"command": "version"},
+            {
+                "properties": {
+                    "config": {"type": "null"},
+                    "result": _closed({"version": {"type": "string", "minLength": 1}}),
+                }
+            },
+        ),
         _result_rule("simulate", "ok", {"tickers": {"minProperties": 1}}),
         _result_rule("simulate", "failed", {"tickers": {"maxProperties": 0}}),
         _result_rule(
@@ -515,5 +557,6 @@ SCHEMA: dict[str, Any] = {
         "simulate_result": _SIMULATE_RESULT,
         "backtest_result": _BACKTEST_RESULT,
         "evaluate_result": _EVALUATE_RESULT,
+        "help_result": _HELP_RESULT,
     },
 }

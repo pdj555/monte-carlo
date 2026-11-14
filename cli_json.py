@@ -111,7 +111,9 @@ def _price_sources(price_sources: object) -> dict[str, dict[str, Any]]:
         path = source.get("path")
         described[ticker] = {
             "kind": str(source.get("kind", "")),
-            "path": path if isinstance(path, str) else None,
+            # Absolute, like config.data_path, so the document reads the same
+            # whichever directory the command was run from.
+            "path": str(Path(path).expanduser().resolve()) if isinstance(path, str) else None,
             "sha256": _file_sha256(path),
             "used_fallback": bool(source.get("used_fallback", False)),
             "is_sample_data": bool(source.get("is_sample_data", False)),
@@ -119,11 +121,20 @@ def _price_sources(price_sources: object) -> dict[str, dict[str, Any]]:
     return described
 
 
+def _absolute_data_path(args: argparse.Namespace) -> str | None:
+    """--data-path as an absolute path, so a replay works from any directory."""
+
+    if args.data_path is None:
+        return None
+    return str(Path(args.data_path).expanduser().resolve())
+
+
 def _shared_flags(args: argparse.Namespace) -> list[str]:
     flags = ["--model", str(args.model), "--scenarios", str(int(args.scenarios))]
     flags += ["--seed", str(int(args.seed)), "--source", str(args.source)]
-    if args.data_path is not None:
-        flags += ["--data-path", str(args.data_path)]
+    data_path = _absolute_data_path(args)
+    if data_path is not None:
+        flags += ["--data-path", data_path]
     return flags
 
 
@@ -137,7 +148,7 @@ def simulate_config(args: argparse.Namespace, *, seed_source: str) -> dict[str, 
         "seed": int(args.seed),
         "seed_source": seed_source,
         "source": str(args.source),
-        "data_path": None if args.data_path is None else str(args.data_path),
+        "data_path": _absolute_data_path(args),
         "reproduce": [
             "monte-carlo",
             "simulate",
@@ -164,7 +175,7 @@ def backtest_config(args: argparse.Namespace, *, seed_source: str) -> dict[str, 
         "seed": int(args.seed),
         "seed_source": seed_source,
         "source": str(args.source),
-        "data_path": None if args.data_path is None else str(args.data_path),
+        "data_path": _absolute_data_path(args),
         "reproduce": [
             "monte-carlo",
             "backtest",

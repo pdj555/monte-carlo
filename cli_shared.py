@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from importlib import metadata
 
 import pandas as pd
@@ -45,11 +46,23 @@ def package_version() -> str:
         return FALLBACK_VERSION
 
 
+_PLAIN_INTEGER = re.compile(r"-?[0-9]+")
+
+
+def _plain_int(value: str) -> int:
+    """Parse an integer written as plain ASCII digits.
+
+    ``int`` also takes ``4_2``, surrounding spaces, a leading ``+`` and digits
+    from other scripts; none of those is what a caller typing a count means.
+    """
+
+    if not isinstance(value, str) or _PLAIN_INTEGER.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError("must be an integer")
+    return int(value)
+
+
 def positive_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be an integer") from exc
+    parsed = _plain_int(value)
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return parsed
@@ -75,10 +88,7 @@ def seed_int(value: str) -> int:
 
 
 def non_negative_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be an integer") from exc
+    parsed = _plain_int(value)
     if parsed < 0:
         raise argparse.ArgumentTypeError("must be a non-negative integer")
     return parsed

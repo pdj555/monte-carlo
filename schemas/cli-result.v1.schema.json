@@ -28,6 +28,8 @@
         "simulate",
         "backtest",
         "evaluate",
+        "help",
+        "version",
         null
       ]
     },
@@ -109,9 +111,6 @@
           },
           "error": {
             "type": "null"
-          },
-          "config": {
-            "type": "object"
           },
           "result": {
             "type": "object"
@@ -409,6 +408,129 @@
                 "$ref": "#/$defs/evaluate_result"
               }
             ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "simulate"
+          },
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "backtest"
+          },
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "evaluate"
+          },
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "command",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "help"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "type": "null"
+          },
+          "result": {
+            "$ref": "#/$defs/help_result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "version"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "config": {
+            "type": "null"
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version"
+            ],
+            "properties": {
+              "version": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           }
         }
       }
@@ -1606,6 +1728,100 @@
                   }
                 }
               }
+            }
+          }
+        }
+      }
+    },
+    "help_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "commands",
+        "exit_codes",
+        "help",
+        "limits",
+        "usage"
+      ],
+      "properties": {
+        "command": {
+          "enum": [
+            "simulate",
+            "backtest",
+            "evaluate",
+            "schema",
+            null
+          ]
+        },
+        "usage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "help": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "exit_codes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          "properties": {
+            "0": {
+              "type": "string"
+            },
+            "1": {
+              "type": "string"
+            },
+            "2": {
+              "type": "string"
+            },
+            "3": {
+              "type": "string"
+            },
+            "4": {
+              "type": "string"
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "max_days",
+            "max_path_cells",
+            "max_scenarios",
+            "max_seed"
+          ],
+          "properties": {
+            "max_scenarios": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_days": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_path_cells": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_seed": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         }

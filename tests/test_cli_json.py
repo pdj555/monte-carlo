@@ -113,7 +113,8 @@ def test_simulate_json_records_seed_config_and_input_hashes(seeded_simulate, val
     assert config["seed_source"] == "argument"
     assert config["tickers"] == ["AAPL", "MSFT"]
     assert (config["days"], config["scenarios"], config["model"]) == (5, 50, "historical")
-    assert (config["source"], config["data_path"]) == ("offline", "sample_data")
+    assert config["source"] == "offline"
+    assert config["data_path"] == str((REPO_ROOT / "sample_data").resolve())
     for ticker, source in document["result"]["price_sources"].items():
         csv_bytes = (REPO_ROOT / "sample_data" / f"{ticker}.csv").read_bytes()
         assert source["sha256"] == hashlib.sha256(csv_bytes).hexdigest()
@@ -511,6 +512,13 @@ def test_seeded_simulate_matches_the_committed_golden_result(validator):
     document = _document(completed, validator)
 
     assert validator.is_valid(golden)
+    # These two hold an absolute path, which differs from machine to machine.
+    for key in ("reproduce", "data_path"):
+        golden["config"].pop(key)
+        document["config"].pop(key)
+    for side in (golden, document):
+        for source in side["result"]["price_sources"].values():
+            source["path"] = Path(source["path"]).name
     for key in ("config", "result", "status", "exit_code", "command"):
         assert not _differences(golden[key], document[key], key)
 
@@ -691,3 +699,123 @@ def test_input_error_and_unusable_output_path_exit_two(tmp_path, validator):
     document = _document(bad_output, validator)
     assert document["error"]["kind"] == "invalid_input"
     assert "--output" in document["error"]["message"]
+
+
+_BAD_PRICE_FILES = {
+    "infinite": "Date,Close\n2024-01-02,185\n2024-01-03,inf\n2024-01-04,186\n",
+    "overflow": "Date,Close\n2024-01-02,185\n2024-01-03,1e999\n2024-01-04,186\n",
+    "empty-cell": "Date,Close\n2024-01-02,185\n2024-01-03,\n2024-01-04,186\n",
+    "not-a-number": "Date,Close\n2024-01-02,185\n2024-01-03,n/a\n2024-01-04,186\n",
+    "duplicate-date": "Date,Close\n2024-01-02,185\n2024-01-02,186\n2024-01-04,187\n",
+    "no-close-column": "Date,Volume\n2024-01-02,185\n2024-01-03,186\n2024-01-04,187\n",
+    "negative": "Date,Close\n2024-01-02,185\n2024-01-03,-1\n2024-01-04,186\n",
+}
+
+
+@pytest.mark.parametrize("command", ["simulate", "backtest"])
+@pytest.mark.parametrize("case", sorted(_BAD_PRICE_FILES))
+def test_unusable_price_file_exits_two_in_both_commands(command, case, tmp_path, validator):
+    (tmp_path / "AAPL.csv").write_text(_BAD_PRICE_FILES[case], encoding="utf-8")
+
+    completed = _run(
+        command, "AAPL", "--source", "offline", "--data-path", str(tmp_path), "--seed", "7",
+        "--json",
+    )
+
+    assert completed.returncode == 2, completed.stdout
+    assert _document(completed, validator)["error"]["kind"] == "price_data"
+
+
+def test_simulate_skips_a_ticker_with_an_unusable_price_file(tmp_path, validator):
+    good = (REPO_ROOT / "sample_data" / "AAPL.csv").read_text(encoding="utf-8")
+    (tmp_path / "AAPL.csv").write_text(good, encoding="utf-8")
+    (tmp_path / "MSFT.csv").write_text(_BAD_PRICE_FILES["infinite"], encoding="utf-8")
+
+    completed = _run(
+        "simulate", "AAPL", "MSFT", "--source", "offline", "--data-path", str(tmp_path),
+        "--days", "5", "--scenarios", "20", "--seed", "7", "--json",
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = _document(completed, validator)["result"]
+    assert set(result["tickers"]) == {"AAPL"}
+    assert [(item["ticker"], item["kind"]) for item in result["errors"]] == [("MSFT", "price_data")]
+
+
+def test_json_help_and_version_are_documents(validator):
+    version = _document(_run("--json", "--version"), validator)
+    program = _document(_run("--help", "--json"), validator)
+    command = _document(_run("simulate", "--json", "--help"), validator)
+
+    assert version["command"] == "version"
+    assert version["result"] == {"version": version["version"]}
+    assert program["command"] == "help" and program["result"]["command"] is None
+    assert program["result"]["commands"] == ["simulate", "backtest", "evaluate", "schema"]
+    assert sorted(program["result"]["exit_codes"]) == ["0", "1", "2", "3", "4"]
+    assert program["result"]["limits"]["max_seed"] == 2**32 - 1
+    assert command["result"]["command"] == "simulate"
+    assert "--scenarios" in command["result"]["help"]
+    assert _run("--help").stdout.startswith("usage: monte-carlo")
+
+
+def test_schema_command_accepts_the_json_flag():
+    plain = _run("schema")
+    flagged = _run("schema", "--json")
+    leading = _run("--json", "schema")
+
+    assert flagged.returncode == 0 and leading.returncode == 0
+    assert flagged.stdout == plain.stdout == leading.stdout
+
+
+@pytest.mark.parametrize("value", ["4_2", "\uff14\uff12", "+5", " 5", "5.0", "0x10"])
+@pytest.mark.parametrize("option", ["--scenarios", "--days", "--seed"])
+def test_integers_must_be_plain_ascii_digits(option, value, validator):
+    completed = _run("simulate", "AAPL", *OFFLINE, option, value, "--json")
+
+    assert completed.returncode == 2
+    assert "must be an integer" in _document(completed, validator)["error"]["message"]
+
+
+def test_stderr_wording_matches_the_exit_code():
+    no_result = _run("backtest", "AAPL", *OFFLINE, "--seed", "7")
+    rejected = _run(
+        "backtest", "AAPL", *OFFLINE, "--lookback", "5", "--hold", "3", "--rebalance", "2"
+    )
+    patch = (
+        "def boom(args): raise ValueError('engine fault')\n"
+        "public_cli.execute_public_backtest = boom"
+    )
+    internal = _run_patched(patch, *BACKTEST, "--seed", "7")
+
+    assert no_result.returncode == 1
+    assert "No usable result for backtest" in no_result.stderr
+    assert "Invalid input" not in no_result.stderr
+    assert rejected.returncode == 2
+    assert "Invalid input for backtest" in rejected.stderr
+    assert internal.returncode == 3
+    assert "Internal error in backtest: ValueError: engine fault" in internal.stderr
+    assert "Invalid input" not in internal.stderr
+
+
+def test_ticker_the_terminal_cannot_encode_is_escaped_not_a_write_failure():
+    completed = subprocess.run(
+        [*CLI, "simulate", "\u00c5APL", *OFFLINE],
+        capture_output=True, check=False, cwd=REPO_ROOT, text=True,
+        env={**ENV, "PYTHONIOENCODING": "ascii"},
+    )
+
+    assert completed.returncode == 2
+    assert "Skipped \\xc5APL" in completed.stdout
+    assert "Traceback" not in completed.stderr
+    assert "Logging error" not in completed.stderr
+
+
+def test_reproduce_replays_from_another_directory(tmp_path, seeded_simulate, validator):
+    document = _document(seeded_simulate, validator)
+    reproduce = document["config"]["reproduce"]
+    data_path = reproduce[reproduce.index("--data-path") + 1]
+
+    assert Path(data_path) == (REPO_ROOT / "sample_data").resolve()
+    replay = _document(_run(*reproduce[1:], cwd=tmp_path), validator)
+    assert replay["result"]["tickers"] == document["result"]["tickers"]
+    assert replay["config"]["reproduce"] == reproduce
