@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pathlib import Path
 
 from evaluation import expand_evaluation_runs, load_evaluation_set

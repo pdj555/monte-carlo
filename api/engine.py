@@ -1,7 +1,5 @@
 """Vercel Python entrypoint for the decision engine."""
 
-from __future__ import annotations
-
 import json
 import os
 import sys

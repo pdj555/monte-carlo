@@ -6,8 +6,6 @@ Keeping it in a module puts it in the installed package, so
 ``monte-carlo schema`` works without a source checkout.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from cli_shared import MAX_DAYS, MAX_SCENARIOS, MAX_SEED

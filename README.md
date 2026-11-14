@@ -15,6 +15,8 @@ flowchart LR
 
 ## Quickstart
 
+Requires Python 3.13 or newer.
+
 ```bash
 python3 -m pip install -e .
 npm install

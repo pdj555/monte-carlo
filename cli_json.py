@@ -6,15 +6,14 @@ warnings stay on stderr. Nothing in the document depends on the wall clock, so
 the same configuration, seed, and price files give the same bytes.
 """
 
-from __future__ import annotations
-
 import argparse
 import hashlib
 import json
 import math
 import secrets
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 import numpy as np
 import pandas as pd

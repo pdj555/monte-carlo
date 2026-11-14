@@ -1,7 +1,5 @@
 """Local launcher for the Next.js browser UI."""
 
-from __future__ import annotations
-
 import shutil
 import subprocess
 import sys

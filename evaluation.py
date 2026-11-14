@@ -1,7 +1,5 @@
 """Versioned scenario-evaluation contracts and scorecard aggregation."""
 
-from __future__ import annotations
-
 import csv
 import hashlib
 import json
@@ -9,10 +7,10 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from types import MappingProxyType
-from typing import Callable, Mapping
+from collections.abc import Callable, Mapping
 
 from cli_shared import MAX_DAYS, MAX_PATH_CELLS, MAX_SCENARIOS, MAX_SEED, InputError
 
@@ -662,7 +660,7 @@ def evaluate_scenario_set(
     return EvaluationReport(
         schema_version=EVALUATION_SCHEMA_VERSION,
         evaluation_set=evaluation_set,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
         outcomes=frozen_outcomes,
         scorecard=_scorecard(frozen_outcomes),
     )

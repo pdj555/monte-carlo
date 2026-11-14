@@ -15,10 +15,6 @@ Example
 >>> fig.show()
 """
 
-from __future__ import annotations
-
-from typing import Optional
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -66,7 +62,7 @@ def plot_distribution(
     df: pd.DataFrame,
     ticker: str,
     *,
-    title: Optional[str] = None,
+    title: str | None = None,
     palette: str = "tab10",
     current_price: float | None = None,
 ) -> plt.Figure:
@@ -135,7 +131,7 @@ def plot_paths(
     df: pd.DataFrame,
     ticker: str,
     *,
-    title: Optional[str] = None,
+    title: str | None = None,
     palette: str = "tab10",
     max_paths: int | None = 100,
     current_price: float | None = None,
@@ -243,7 +239,7 @@ def plot_paths(
 def plot_equity_curve(
     equity_curve: pd.DataFrame,
     *,
-    title: Optional[str] = None,
+    title: str | None = None,
     palette: str = "tab10",
 ) -> plt.Figure:
     """Plot strategy and benchmark equity curves on one figure."""

@@ -4,8 +4,6 @@ Optional: used when the CLI is invoked with ``--ai-summary`` and
 ``OLLAMA_API_KEY`` or ``OPENAI_API_KEY`` is available.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import urllib.error

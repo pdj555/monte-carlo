@@ -1,14 +1,12 @@
 """Walk-forward validation for simulation-driven portfolio decisions."""
 
-from __future__ import annotations
-
 import argparse
 import json
 import logging
 import sys
 import zlib
 from pathlib import Path
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -326,7 +324,7 @@ def run_walk_forward_backtest(
             ticker_seed = (
                 None
                 if seed is None
-                else int(seed) + zlib.adler32(f"{rebalance_idx}:{ticker}".encode("utf-8"))
+                else int(seed) + zlib.adler32(f"{rebalance_idx}:{ticker}".encode())
             )
             simulations = _simulate_window(
                 model=model,
@@ -485,7 +483,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
+def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     """Return parsed backtest CLI arguments."""
 
     parser = build_parser()
@@ -554,7 +552,7 @@ def run(
 
 
 def main(
-    argv: Optional[Iterable[str]] = None,
+    argv: Iterable[str] | None = None,
     *,
     show_deprecation: bool = True,
 ) -> int:

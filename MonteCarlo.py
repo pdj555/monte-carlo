@@ -1,17 +1,15 @@
 """Deprecated single-ticker wrapper for the legacy Monte Carlo entrypoint."""
 
-from __future__ import annotations
-
 import argparse
 import logging
 import sys
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 import cli
 from simulate_cli import build_simulation_args
 
 
-def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
+def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     """Return CLI options controlling the deprecated single-ticker wrapper."""
 
     parser = argparse.ArgumentParser(
@@ -55,7 +53,7 @@ def _build_legacy_args(args: argparse.Namespace) -> argparse.Namespace:
     )
 
 
-def main(argv: Optional[Iterable[str]] = None) -> int:
+def main(argv: Iterable[str] | None = None) -> int:
     """Entrypoint for the deprecated ``python MonteCarlo.py`` command."""
 
     print(

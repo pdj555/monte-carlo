@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
@@ -37,7 +35,7 @@ def test_runtime_files_use_next_for_ui_and_python_for_engine() -> None:
 
     assert "Flask" not in requirements
     assert Path("package.json").exists()
-    assert Path(".python-version").read_text(encoding="utf-8").strip() == "3.12"
+    assert Path(".python-version").read_text(encoding="utf-8").strip() == "3.13"
 
 
 def test_local_agent_runtime_files_are_ignored() -> None:

@@ -1,7 +1,5 @@
 """Thin deprecated facade for legacy simulation and public CLI entrypoints."""
 
-from __future__ import annotations
-
 from legacy_cli import build_parser, legacy_main, parse_args, run
 from public_cli import (
     build_public_parser,
