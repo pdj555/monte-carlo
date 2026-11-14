@@ -10,17 +10,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from cli_shared import MAX_DAYS, MAX_SCENARIOS
+from cli_shared import MAX_DAYS, MAX_SCENARIOS, MAX_SEED
 
 SCHEMA_ID = "monte-carlo.cli-result.v1"
 
 _NUMBER_OR_NULL = {"type": ["number", "null"]}
 _PROBABILITY = {"type": "number", "minimum": 0, "maximum": 1}
 _PROBABILITY_OR_NULL = {"type": ["number", "null"], "minimum": 0, "maximum": 1}
-_SEED = {"type": "integer", "minimum": 0}
+_SEED = {"type": "integer", "minimum": 0, "maximum": MAX_SEED}
 _COUNT = {"type": "integer", "minimum": 0}
 _STRINGS = {"type": "array", "items": {"type": "string"}}
-_DATE = {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+# A date for daily prices; a date and time (ISO 8601) when the price file is intraday.
+_DATE = {
+    "type": "string",
+    "pattern": (
+        "^[0-9]{4}-[0-9]{2}-[0-9]{2}"
+        "(T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?([+-][0-9]{2}:[0-9]{2})?)?$"
+    ),
+}
 _SHA256 = "^[0-9a-f]{64}$"
 
 
@@ -102,7 +109,9 @@ _COMMON_CONFIG = {
     "reproduce": {
         "description": (
             "argv that replays the numbers. It leaves out --output, --show and "
-            "--details, which change what is saved or shown, not what is computed."
+            "--details, which change what is saved or shown, not what is computed. "
+            "The replay prints the same result and the same config except "
+            "seed_source, which reads argument because the seed is now given."
         ),
         "type": "array",
         "items": {"type": "string"},

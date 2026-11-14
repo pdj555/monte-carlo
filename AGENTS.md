@@ -64,22 +64,24 @@ pytest -q
 flake8 .
 ```
 
-- `--json` prints one JSON document on stdout; logs go to stderr. It may be written before or after the command, and is not accepted abbreviated. `monte-carlo schema` prints the document's JSON Schema, also from an installed package; the same schema is committed as `schemas/cli-result.v1.schema.json`.
+- `--json` prints one JSON document on stdout; logs go to stderr. It may be written before or after the command. `monte-carlo --json` with no command exits `2` with a usage document. `monte-carlo schema` prints the document's JSON Schema, also from an installed package; the same schema is committed as `schemas/cli-result.v1.schema.json`.
 - Exit codes, the same with and without `--json`; `exit_code` in the document equals the process exit code:
 
   | Code | Meaning |
   | --- | --- |
   | `0` | ok |
-  | `1` | ran, but no usable result: prices loaded but are too short to simulate or to form one backtest period, or an evaluation run failed |
-  | `2` | the command line or its inputs were rejected, including price data that could not be loaded (unknown ticker, missing `--data-path`); the document has `error` and no `result` |
-  | `3` | internal error (`error.kind` is `internal`) |
+  | `1` | ran, but no usable result: prices loaded but are too short to simulate or to form one backtest period, or an evaluation run failed for a reason other than missing price data |
+  | `2` | the command line or its inputs were rejected, including price data that could not be loaded (unknown ticker, missing `--data-path`, a zero or negative price) in `simulate`, `backtest`, or any `evaluate` run; the document has `error` and no `result` |
+  | `3` | internal error (`error.kind` is `internal`): any exception that is not a rejected input, including a `ValueError` or `OSError` from inside the engine |
   | `4` | stdout could not be written (reader closed the pipe, device full, descriptor closed); one line on stderr, no document |
 
 - `simulate` skips a ticker whose prices cannot be loaded and reports it in `result.errors`; it exits `2` only when no ticker loaded. `backtest` needs every ticker and exits `2` if any is missing.
-- Limits: `--scenarios` at most 1000000, `--days` at most 25200, and `--days` x `--scenarios` at most 50000000 for `simulate`. Above them the exit code is `2`.
+- Limits: `--scenarios` at most 1000000, `--days` at most 25200, `--days` x `--scenarios` at most 50000000 for `simulate`, and `--seed` from 0 to 4294967295. An `evaluate` manifest is held to the same limits. Above them the exit code is `2`.
 - `config` holds the seed and every setting of the run. Without `--seed`, one is drawn and reported (`seed_source: "generated"`). Same seed, settings, and price files give the same bytes; `result.price_sources` carries each local file's SHA-256.
-- `config.reproduce` is the argv that replays the numbers. It leaves out `--output`, `--show`, and `--details`, which change what is saved or shown, not what is computed.
+- `config.reproduce` is the argv that replays the numbers. It leaves out `--output`, `--show`, and `--details`, which change what is saved or shown, not what is computed. The replay prints the same `result` and the same `config` except `seed_source`, which reads `argument` because the seed is now given.
 - CI installs `requirements.lock.txt` first (Python 3.9 to 3.12) and compares a seeded run with `tests/golden/simulate-seed42.json`; do the same to match its numbers exactly.
+- Dates in a backtest are `YYYY-MM-DD` for daily prices and ISO 8601 date-times (`2024-01-02T14:30:00`) when the price file is intraday.
+- Behaviour change: option abbreviations are rejected in every mode, with or without `--json`. `--scen 100` used to mean `--scenarios 100`; it is now a usage error (exit `2`). Write options in full.
 - Without `--json` the text output is unchanged. `monte-carlo` with no subcommand prints help and exits `1`.
 
 ## Coding Style & Naming Conventions

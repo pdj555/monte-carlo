@@ -691,7 +691,8 @@
         },
         "seed": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 4294967295
         },
         "seed_source": {
           "enum": [
@@ -713,7 +714,7 @@
           ]
         },
         "reproduce": {
-          "description": "argv that replays the numbers. It leaves out --output, --show and --details, which change what is saved or shown, not what is computed.",
+          "description": "argv that replays the numbers. It leaves out --output, --show and --details, which change what is saved or shown, not what is computed. The replay prints the same result and the same config except seed_source, which reads argument because the seed is now given.",
           "type": "array",
           "items": {
             "type": "string"
@@ -765,7 +766,8 @@
         },
         "seed": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 4294967295
         },
         "seed_source": {
           "enum": [
@@ -787,7 +789,7 @@
           ]
         },
         "reproduce": {
-          "description": "argv that replays the numbers. It leaves out --output, --show and --details, which change what is saved or shown, not what is computed.",
+          "description": "argv that replays the numbers. It leaves out --output, --show and --details, which change what is saved or shown, not what is computed. The replay prints the same result and the same config except seed_source, which reads argument because the seed is now given.",
           "type": "array",
           "items": {
             "type": "string"
@@ -833,7 +835,8 @@
           "type": "array",
           "items": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 4294967295
           }
         },
         "reproduce": {
@@ -1205,11 +1208,11 @@
             "properties": {
               "rebalance_date": {
                 "type": "string",
-                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?([+-][0-9]{2}:[0-9]{2})?)?$"
               },
               "end_date": {
                 "type": "string",
-                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?([+-][0-9]{2}:[0-9]{2})?)?$"
               },
               "holding_days": {
                 "type": "integer",
@@ -1276,7 +1279,7 @@
             "properties": {
               "date": {
                 "type": "string",
-                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?([+-][0-9]{2}:[0-9]{2})?)?$"
               },
               "strategy": {
                 "type": "number"
@@ -1320,7 +1323,8 @@
               "type": "array",
               "items": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 4294967295
               }
             },
             "manifest_sha256": {
@@ -1362,7 +1366,8 @@
               },
               "seed": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 4294967295
               },
               "source_name": {
                 "type": "string"
@@ -1435,7 +1440,8 @@
               },
               "seed": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 4294967295
               },
               "source_name": {
                 "type": "string"

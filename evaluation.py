@@ -14,6 +14,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Callable, Mapping
 
+from cli_shared import MAX_DAYS, MAX_PATH_CELLS, MAX_SCENARIOS, MAX_SEED, InputError
+
 
 EVALUATION_SCHEMA_VERSION = 1
 MAX_EVALUATION_RUNS = 100
@@ -24,7 +26,7 @@ _TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.^=-]{0,14}$")
 _NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
-class EvaluationConfigError(ValueError):
+class EvaluationConfigError(InputError):
     """Raised when an evaluation manifest cannot be safely expanded."""
 
 
@@ -295,6 +297,19 @@ def load_evaluation_set(path: str | Path) -> EvaluationSet:
         _required(top_level, "scenarios", "scenarios"), "scenarios"
     )
 
+    # The same ceilings the simulate command applies to --days and --scenarios.
+    if days > MAX_DAYS:
+        _config_error("days", f"must be at most {MAX_DAYS}", "Lower days")
+    if scenarios > MAX_SCENARIOS:
+        _config_error("scenarios", f"must be at most {MAX_SCENARIOS}", "Lower scenarios")
+    if days * scenarios > MAX_PATH_CELLS:
+        _config_error(
+            "days",
+            f"days x scenarios is {days * scenarios}; the most one run may hold is "
+            f"{MAX_PATH_CELLS}",
+            "Lower days or scenarios",
+        )
+
     raw_universes = _required(top_level, "universes", "universes")
     if not isinstance(raw_universes, list) or not raw_universes:
         _config_error("universes", "must be a non-empty array", "Provide at least one universe")
@@ -351,6 +366,8 @@ def load_evaluation_set(path: str | Path) -> EvaluationSet:
                 "must be a non-negative integer",
                 "Provide zero or a positive integer seed",
             )
+        if raw_seed > MAX_SEED:
+            _config_error(f"seeds[{index}]", f"must be at most {MAX_SEED}", "Use a smaller seed")
         seeds.append(raw_seed)
     _unique(tuple(seeds), "seeds")
 

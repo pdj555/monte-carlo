@@ -14,6 +14,17 @@ FALLBACK_VERSION = "0.1.0"
 MAX_SCENARIOS = 1_000_000
 MAX_DAYS = 25_200
 MAX_PATH_CELLS = 50_000_000
+# The largest seed accepted. Every value up to it seeds numpy unchanged and is
+# an exact integer in JSON readers that hold numbers as doubles.
+MAX_SEED = 2**32 - 1
+
+
+class InputError(ValueError):
+    """Something the caller supplied was rejected: a setting, a file, a path.
+
+    Only this (and price data that cannot be loaded) is the caller's to fix.
+    Any other exception from the engine is treated as a fault in the program.
+    """
 
 
 class IntentionalDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
@@ -54,6 +65,13 @@ def bounded_positive_int(maximum: int):
         return parsed
 
     return parse
+
+
+def seed_int(value: str) -> int:
+    parsed = non_negative_int(value)
+    if parsed > MAX_SEED:
+        raise argparse.ArgumentTypeError(f"must be at most {MAX_SEED}")
+    return parsed
 
 
 def non_negative_int(value: str) -> int:

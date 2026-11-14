@@ -14,7 +14,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from analysis import summarize_final_prices
-from data import PriceDataError, fetch_prices, get_price_source
+from cli_shared import InputError
+from data import PriceDataError, fetch_prices, get_price_source, require_positive_prices
 from decision import (
     apply_risk_guards,
     enforce_portfolio_risk_budget,
@@ -83,7 +84,7 @@ def _non_negative_float(value: str) -> float:
 def _normalise_tickers(ticker_arg: str) -> list[str]:
     tickers = [ticker.strip().upper() for ticker in ticker_arg.split(",") if ticker.strip()]
     if not tickers:
-        raise ValueError("No valid tickers were supplied. Provide at least one ticker symbol.")
+        raise InputError("No valid tickers were supplied. Provide at least one ticker symbol.")
     return list(dict.fromkeys(tickers))
 
 
@@ -136,6 +137,7 @@ def _load_price_history(
             prefer_local=offline_only,
             allow_local_fallback=allow_local_fallback,
         )
+        require_positive_prices(ticker, prices)
         source_info = get_price_source(prices)
         if source_info is not None:
             price_sources[ticker] = source_info
@@ -144,7 +146,7 @@ def _load_price_history(
 
     combined = pd.concat(price_frames, axis=1, join="inner").dropna()
     if combined.empty:
-        raise ValueError(
+        raise InputError(
             "No overlapping price history was available for the requested tickers. "
             "Try a different date range or use tickers with shared history."
         )
@@ -264,7 +266,7 @@ def run_walk_forward_backtest(
     """
 
     if lookback_days <= 0 or holding_days <= 0 or rebalance_every <= 0 or top_k <= 0:
-        raise ValueError(
+        raise InputError(
             "lookback_days, holding_days, rebalance_every, and top_k must be positive. "
             "Use values greater than zero."
         )
@@ -274,7 +276,7 @@ def run_walk_forward_backtest(
         # return is compounded several times (hold 20, rebalance 5: four times);
         # with it shorter, the days between windows vanish from both the return and
         # the clock. Overlapping tranches are not modeled, so refuse the mismatch.
-        raise ValueError(
+        raise InputError(
             f"holding_days ({holding_days}) must equal rebalance_every ({rebalance_every}): "
             "overlapping or gapped holding windows would be compounded as if back to back."
         )

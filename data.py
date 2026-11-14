@@ -46,6 +46,21 @@ def _with_price_source(
     return tagged
 
 
+def require_positive_prices(ticker: str, prices: pd.Series) -> None:
+    """Reject a price series with a zero or negative price.
+
+    A return cannot be computed from a price of zero, so such a file is bad
+    input, not a short history.
+    """
+
+    values = pd.to_numeric(prices, errors="coerce").dropna()
+    if (values <= 0).any():
+        raise PriceDataError(
+            f"Price data for '{ticker}' contains a zero or negative price. "
+            "Every Close value must be greater than zero."
+        )
+
+
 def get_price_source(prices: pd.Series) -> dict[str, object] | None:
     """Return normalized provenance metadata attached to a fetched price series."""
 

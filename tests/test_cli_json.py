@@ -141,8 +141,8 @@ def test_unseeded_simulate_reports_a_seed_that_replays_the_run(validator):
     assert config["seed_source"] == "generated"
     assert config["reproduce"][0] == "monte-carlo"
     replay = _document(_run(*config["reproduce"][1:]), validator)
-    assert replay["config"]["seed"] == config["seed"]
     assert replay["config"]["seed_source"] == "argument"
+    assert {**replay["config"], "seed_source": "generated"} == config
     assert replay["result"] == first["result"]
 
 
@@ -274,9 +274,11 @@ def test_evaluate_with_failed_runs_exits_one(tmp_path, validator):
     manifest = json.loads(
         (REPO_ROOT / "evaluation_sets" / "sample-stability.json").read_text(encoding="utf-8")
     )
-    empty_dir = tmp_path / "no-prices"
-    empty_dir.mkdir()
-    manifest["sources"][0]["data_path"] = str(empty_dir)
+    short_dir = tmp_path / "short-prices"
+    short_dir.mkdir()
+    for ticker in ("AAPL", "MSFT"):
+        (short_dir / f"{ticker}.csv").write_text("Date,Close\n2024-01-02,185.0\n", encoding="utf-8")
+    manifest["sources"][0]["data_path"] = str(short_dir)
     set_file = tmp_path / "failing.json"
     set_file.write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -340,7 +342,8 @@ def test_schema_rejects_simulate_documents_that_break_the_contract(
         lambda doc: doc["result"]["rebalance_log"][0].update(rebalance_date="yesterday"),
         lambda doc: doc["result"]["rebalance_log"][0].update(extra=1),
         lambda doc: doc["result"]["rebalance_log"][0].update(cash_weight=-0.1),
-        lambda doc: doc["result"]["equity_curve"][0].update(date="2024-01-09T00:00:00"),
+        lambda doc: doc["result"]["equity_curve"][0].update(date="2024-01-09 00:00"),
+        lambda doc: doc["config"].update(seed=2**32),
         lambda doc: doc["result"].update(rebalance_log=[]),
     ],
 )
@@ -482,6 +485,9 @@ def test_json_mode_is_decided_by_the_parser_not_by_the_text():
     abbreviated = _run(*SIMULATE, "--seed", "7", "--js")
     as_ticker = _run("simulate", *OFFLINE, "--days", "x", "--", "--json")
 
+    shortened_option = _run("simulate", "AAPL", *OFFLINE, "--scen", "10")
+    assert shortened_option.returncode == 2
+    assert "unrecognized arguments: --scen" in shortened_option.stderr
     assert abbreviated.returncode == 2
     assert abbreviated.stdout == ""
     assert "unrecognized arguments: --js" in abbreviated.stderr
@@ -530,3 +536,158 @@ def test_agents_md_json_commands_run_as_written(validator):
         document = _document(completed, validator)
         assert document["command"] == command[0]
         assert document["status"] == "ok"
+
+
+def _write_manifest(tmp_path: Path, **changes) -> Path:
+    manifest = json.loads(
+        (REPO_ROOT / "evaluation_sets" / "sample-stability.json").read_text(encoding="utf-8")
+    )
+    manifest["sources"][0]["data_path"] = str(REPO_ROOT / "sample_data")
+    manifest.update(changes)
+    set_file = tmp_path / "set.json"
+    set_file.write_text(json.dumps(manifest), encoding="utf-8")
+    return set_file
+
+
+def test_json_without_a_command_exits_two_with_a_usage_document(validator):
+    completed = _run("--json")
+
+    assert completed.returncode == 2
+    document = _document(completed, validator)
+    assert document["command"] is None
+    assert document["error"]["kind"] == "usage"
+    bare = _run()
+    assert bare.returncode == 1
+    assert "Choose `simulate`" in bare.stdout
+
+
+def _intraday_prices(tmp_path: Path) -> Path:
+    data_dir = tmp_path / "intraday"
+    data_dir.mkdir()
+    for ticker, base in (("AAPL", 185.0), ("MSFT", 370.0)):
+        rows = ["Date,Close"]
+        for hour in range(40):
+            day, clock = divmod(9 + hour, 24)
+            price = base * (1 + 0.001 * ((hour * 7) % 5 - 2))
+            rows.append(f"2024-01-{2 + day:02d} {clock:02d}:30:00,{price:.4f}")
+        (data_dir / f"{ticker}.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return data_dir
+
+
+def test_every_document_type_is_schema_valid_on_intraday_prices(tmp_path, validator):
+    data_dir = _intraday_prices(tmp_path)
+    source = ["--source", "offline", "--data-path", str(data_dir), "--seed", "7", "--json"]
+    set_file = _write_manifest(tmp_path)
+    manifest = json.loads(set_file.read_text(encoding="utf-8"))
+    manifest["sources"][0]["data_path"] = str(data_dir)
+    set_file.write_text(json.dumps(manifest), encoding="utf-8")
+
+    simulate = _run("simulate", "AAPL", "MSFT", "--days", "5", "--scenarios", "20", *source)
+    backtest = _run(
+        "backtest", "AAPL", "MSFT", "--lookback", "5", "--hold", "3", "--scenarios", "10", *source
+    )
+    evaluate = _run("evaluate", str(set_file), "--json")
+
+    for completed in (simulate, backtest, evaluate):
+        assert completed.returncode == 0, completed.stderr
+        assert _document(completed, validator)["status"] == "ok"
+    row = _document(backtest, validator)["result"]["rebalance_log"][0]
+    assert "T" in row["rebalance_date"]
+
+
+def test_seed_above_the_documented_maximum_exits_two(validator):
+    at_limit = _run(*SIMULATE, "--seed", str(2**32 - 1), "--json")
+    above = _run(*SIMULATE, "--seed", str(2**32), "--json")
+
+    assert at_limit.returncode == 0, at_limit.stderr
+    assert _document(at_limit, validator)["config"]["seed"] == 2**32 - 1
+    assert above.returncode == 2
+    assert "at most 4294967295" in _document(above, validator)["error"]["message"]
+    assert _run(*BACKTEST, "--seed", str(2**32), "--json").returncode == 2
+
+
+@pytest.mark.parametrize(
+    "changes, text",
+    [
+        ({"scenarios": 1_000_001}, "scenarios: must be at most 1000000"),
+        ({"days": 25_201}, "days: must be at most 25200"),
+        ({"days": 25_200, "scenarios": 1_000_000}, "the most one run may hold is 50000000"),
+        ({"seeds": [7, 2**32]}, "seeds[1]: must be at most 4294967295"),
+    ],
+    ids=["scenarios", "days", "product", "seed"],
+)
+def test_evaluate_manifest_above_the_limits_exits_two(tmp_path, validator, changes, text):
+    completed = _run("evaluate", str(_write_manifest(tmp_path, **changes)), "--json")
+
+    assert completed.returncode == 2
+    document = _document(completed, validator)
+    assert document["error"]["kind"] == "invalid_input"
+    assert text in document["error"]["message"]
+
+
+def test_evaluate_with_a_ticker_that_has_no_price_data_exits_two(tmp_path, validator):
+    universes = [{"name": "with-unknown", "tickers": ["AAPL", "ZZZZ"]}]
+    set_file = _write_manifest(tmp_path, universes=universes)
+
+    completed = _run("evaluate", str(set_file), "--json")
+
+    assert completed.returncode == 2
+    document = _document(completed, validator)
+    assert document["status"] == "error"
+    assert document["error"]["kind"] == "price_data"
+    assert "ZZZZ" in document["error"]["message"]
+    assert document["result"] is None
+    assert _run("evaluate", str(set_file)).returncode == 2
+
+
+@pytest.mark.parametrize("command", ["simulate", "backtest"])
+def test_zero_prices_exit_two_in_both_commands(command, tmp_path, validator):
+    data_dir = tmp_path / "zero"
+    data_dir.mkdir()
+    rows = ["Date,Close"] + [f"2024-01-{day:02d},0" for day in range(2, 22)]
+    (data_dir / "AAPL.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    sizes = (
+        ["--days", "5", "--scenarios", "10"]
+        if command == "simulate"
+        else ["--lookback", "5", "--hold", "3", "--scenarios", "10"]
+    )
+
+    completed = _run(
+        command, "AAPL", *sizes, "--source", "offline", "--data-path", str(data_dir),
+        "--seed", "7", "--json",
+    )
+
+    assert completed.returncode == 2
+    document = _document(completed, validator)
+    assert document["error"]["kind"] == "price_data"
+    assert "zero or negative price" in document["error"]["message"]
+
+
+@pytest.mark.parametrize("error", ["ValueError", "OSError", "KeyError"])
+def test_engine_exception_that_is_not_an_input_error_exits_three(error, validator):
+    patch = (
+        f"def boom(args): raise {error}('engine fault')\n"
+        "public_cli.execute_public_backtest = boom"
+    )
+
+    completed = _run_patched(patch, *BACKTEST, "--seed", "7", "--json")
+
+    assert completed.returncode == 3
+    assert _document(completed, validator)["error"]["kind"] == "internal"
+
+
+def test_input_error_and_unusable_output_path_exit_two(tmp_path, validator):
+    not_a_directory = tmp_path / "file.txt"
+    not_a_directory.write_text("x", encoding="utf-8")
+
+    mismatch = _run(
+        "backtest", "AAPL", *OFFLINE, "--lookback", "5", "--hold", "3", "--rebalance", "2", "--json"
+    )
+    bad_output = _run(*SIMULATE, "--seed", "7", "--output", str(not_a_directory), "--json")
+
+    assert mismatch.returncode == 2
+    assert _document(mismatch, validator)["error"]["kind"] == "invalid_input"
+    assert bad_output.returncode == 2
+    document = _document(bad_output, validator)
+    assert document["error"]["kind"] == "invalid_input"
+    assert "--output" in document["error"]["message"]

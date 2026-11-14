@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from cli_schema import SCHEMA, SCHEMA_ID
-from cli_shared import package_version
+from cli_shared import MAX_SEED, package_version
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -34,9 +34,8 @@ _STATUS_BY_EXIT_CODE = {
     EXIT_INTERNAL: "error",
 }
 
-# Seeds drawn for the caller stay below 2**31 so per-ticker offsets added by the
-# engine remain ordinary non-negative integers.
-_GENERATED_SEED_BOUND = 2**31
+# Seeds drawn for the caller cover the whole range --seed accepts.
+_GENERATED_SEED_BOUND = MAX_SEED + 1
 
 
 def resolve_seed(args: argparse.Namespace) -> str:

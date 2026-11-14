@@ -28,8 +28,9 @@ from cli_shared import (
     MAX_PATH_CELLS,
     MAX_SCENARIOS,
     IntentionalDefaultsHelpFormatter,
+    InputError,
     bounded_positive_int,
-    non_negative_int,
+    seed_int,
     package_version,
     positive_int,
     render_detailed_simulation_tables,
@@ -181,7 +182,7 @@ def build_public_parser() -> argparse.ArgumentParser:
     )
     simulate_parser.add_argument(
         "--seed",
-        type=non_negative_int,
+        type=seed_int,
         default=None,
         help="Random seed for reproducible runs.",
     )
@@ -272,7 +273,7 @@ def build_public_parser() -> argparse.ArgumentParser:
     )
     backtest_parser.add_argument(
         "--seed",
-        type=non_negative_int,
+        type=seed_int,
         default=None,
         help="Random seed for reproducible runs.",
     )
@@ -700,10 +701,51 @@ def _execute_evaluation_run(run: EvaluationRun) -> dict[str, Any]:
 
 
 def execute_public_evaluate(args: argparse.Namespace) -> EvaluationReport:
-    """Execute an evaluation set without rendering text output."""
+    """Execute an evaluation set without rendering text output.
+
+    Tickers whose prices could not be loaded are listed on
+    ``args.missing_price_data``: the manifest named data that does not exist,
+    which is rejected input here as it is for simulate and backtest.
+    """
 
     evaluation_set = load_evaluation_set(args.set_file)
-    return evaluate_scenario_set(evaluation_set, _execute_evaluation_run)
+    missing: list[str] = []
+
+    def runner(run: EvaluationRun) -> dict[str, Any]:
+        result = _execute_evaluation_run(run)
+        report = result.get("report", {})
+        for item in report.get("errors", []) if isinstance(report, dict) else []:
+            if isinstance(item, dict) and item.get("kind") == "price_data":
+                missing.append(f"{run.run_id}: {item.get('error')}")
+        return result
+
+    report = evaluate_scenario_set(evaluation_set, runner)
+    args.missing_price_data = missing
+    return report
+
+
+def _prepare_output_directory(output: str | None) -> None:
+    """Create ``--output`` up front so an unusable path is reported as input."""
+
+    if not output:
+        return
+    try:
+        Path(output).expanduser().mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise InputError(f"--output {output!r} cannot be used as a directory: {exc}") from exc
+
+
+def _evaluate_exit(args: argparse.Namespace, report: EvaluationReport) -> tuple[int, str, str]:
+    """Exit code, error kind and message for a finished evaluation."""
+
+    missing = list(getattr(args, "missing_price_data", []))
+    if missing:
+        return EXIT_USAGE, "price_data", "; ".join(missing)
+    failed_runs = int(report.scorecard.failed_runs)
+    if failed_runs > 0:
+        message = f"{failed_runs} evaluation run(s) failed; see result.outcomes."
+        return EXIT_FAILED, "failed_runs", message
+    return EXIT_OK, "", ""
 
 
 def run_public_simulate(args: argparse.Namespace) -> dict[str, Any]:
@@ -752,17 +794,18 @@ def _emit_json(document: dict[str, Any]) -> int:
 def _classify_exception(exc: Exception) -> tuple[int, str]:
     """Exit code and error kind for an exception a command raised.
 
-    Price data that cannot be loaded, and any other rejected input, is the
-    caller's to fix (2). Prices that loaded but are too short to produce
-    anything is a run without a result (1). Everything else is a fault in this
-    program (3).
+    Price data that cannot be loaded, and input the validation code rejected
+    (``InputError``), is the caller's to fix (2). Prices that loaded but are too
+    short to produce anything is a run without a result (1). Everything else,
+    including a ``ValueError`` or ``OSError`` from inside the engine, is a
+    fault in this program (3).
     """
 
     if isinstance(exc, PriceDataError):
         return EXIT_USAGE, "price_data"
     if isinstance(exc, backtest_cli.InsufficientHistoryError):
         return EXIT_FAILED, "no_results"
-    if isinstance(exc, (ValueError, OSError)):
+    if isinstance(exc, InputError):
         return EXIT_USAGE, "invalid_input"
     return EXIT_INTERNAL, "internal"
 
@@ -794,6 +837,7 @@ def _run_json_command(args: argparse.Namespace) -> int:
     command = str(args.command)
     config: dict[str, Any] | None = None
     try:
+        _prepare_output_directory(args.output)
         if command == "simulate":
             config = cli_json.simulate_config(args, seed_source=cli_json.resolve_seed(args))
             legacy_args = _build_public_simulate_legacy_args(args)
@@ -834,19 +878,15 @@ def _run_json_command(args: argparse.Namespace) -> int:
         if args.output:
             save_evaluation_report(report, args.output)
         report_dict = report.to_dict()
-        failed_runs = int(report.scorecard.failed_runs)
+        exit_code, kind, message = _evaluate_exit(args, report)
         return _emit_json(
             cli_json.build_document(
                 command=command,
-                exit_code=EXIT_FAILED if failed_runs > 0 else EXIT_OK,
+                exit_code=exit_code,
                 config=cli_json.evaluate_config(args, report_dict),
-                result=cli_json.evaluate_result(report_dict),
-                error_kind="failed_runs" if failed_runs > 0 else None,
-                error_message=(
-                    f"{failed_runs} evaluation run(s) failed; see result.outcomes."
-                    if failed_runs > 0
-                    else None
-                ),
+                result=None if exit_code == EXIT_USAGE else cli_json.evaluate_result(report_dict),
+                error_kind=kind or None,
+                error_message=message or None,
             )
         )
     except Exception as exc:
@@ -903,6 +943,18 @@ def _run(raw_argv: list[str]) -> int:
                 error_message=exc.message,
             )
         )
+    if args.command is None and args.json:
+        import cli_json
+
+        parser.print_usage(sys.stderr)
+        return _emit_json(
+            cli_json.build_document(
+                command=None,
+                exit_code=EXIT_USAGE,
+                error_kind="usage",
+                error_message="a command is required: simulate, backtest, evaluate, or schema",
+            )
+        )
     if args.command is None:
         parser.print_help()
         print(
@@ -921,6 +973,7 @@ def _run(raw_argv: list[str]) -> int:
         return _run_json_command(args)
 
     try:
+        _prepare_output_directory(args.output)
         if args.command == "simulate":
             result = run_public_simulate(args)
             if result["summaries"].empty:
@@ -931,7 +984,10 @@ def _run(raw_argv: list[str]) -> int:
             run_public_backtest(args)
             return EXIT_OK
         report = run_public_evaluate(args)
-        return EXIT_FAILED if report.scorecard.failed_runs > 0 else EXIT_OK
+        exit_code, kind, message = _evaluate_exit(args, report)
+        if kind == "price_data":
+            LOGGER.error("Price data could not be loaded: %s", message)
+        return exit_code
     except Exception as exc:
         _log_public_error(exc, command=str(args.command), args=args)
         return _classify_exception(exc)[0]
