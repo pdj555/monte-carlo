@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pathlib import Path
 
 import pandas as pd
@@ -112,7 +110,7 @@ def test_fetch_prices_supports_bundled_secondary_sample_fixture() -> None:
     assert float(prices.iloc[-1]) == 198.0
     assert get_price_source(prices) == {
         "kind": "local",
-        "path": str((Path(data.__file__).resolve().parent / "sample_data" / "MSFT.csv")),
+        "path": str(Path(data.__file__).resolve().parent / "sample_data" / "MSFT.csv"),
         "used_fallback": False,
         "is_sample_data": True,
     }

@@ -1,7 +1,5 @@
 """The ``--json`` contract, checked the way a script would use it: as a subprocess."""
 
-from __future__ import annotations
-
 import copy
 import hashlib
 import json

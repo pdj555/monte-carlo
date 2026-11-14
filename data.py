@@ -10,11 +10,8 @@ Example
 >>> print(prices.head())
 """
 
-from __future__ import annotations
-
 import time
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -89,7 +86,7 @@ def _is_bundled_sample_path(path: Path) -> bool:
         return False
 
 
-def _parse_date(value: Optional[str], *, label: str) -> Optional[pd.Timestamp]:
+def _parse_date(value: str | None, *, label: str) -> pd.Timestamp | None:
     """Parse a user-supplied date string into a pandas Timestamp."""
 
     if value is None:
@@ -104,7 +101,7 @@ def _parse_date(value: Optional[str], *, label: str) -> Optional[pd.Timestamp]:
 
 
 def _slice_prices(
-    prices: pd.Series, start: Optional[str], end: Optional[str]
+    prices: pd.Series, start: str | None, end: str | None
 ) -> pd.Series:
     attrs = dict(prices.attrs)
     start_ts = _parse_date(start, label="start")
@@ -230,13 +227,13 @@ def _normalize_download_close(
 
 def fetch_prices(
     ticker: str,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
+    start: str | None = None,
+    end: str | None = None,
     *,
-    offline_path: Optional[Path | str] = None,
+    offline_path: Path | str | None = None,
     prefer_local: bool = False,
     allow_local_fallback: bool = True,
-    cache_dir: Optional[Path | str] = None,
+    cache_dir: Path | str | None = None,
     refresh_cache: bool = False,
 ) -> pd.Series:
     """Download daily closing prices for ``ticker``.
@@ -298,7 +295,7 @@ def fetch_prices(
         )
 
     attempts = 0
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
     if not prefer_local:
         while attempts < 3:
             try:

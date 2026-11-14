@@ -1,15 +1,14 @@
 """Simulation workflow shared by the public CLI and legacy wrapper."""
 
-from __future__ import annotations
-
 import argparse
 import hashlib
 import json
 import logging
 import zlib
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -269,11 +268,11 @@ def _save_outputs(
             handle.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n")
             for ticker, row in execution_plan.iterrows():
                 handle.write(
-                    (
+
                         f"| {ticker} | {row['weight']:.1%} | {row['price']:.2f} | "
                         f"{row['target_dollars']:.2f} | {row['shares']:.4f} | "
                         f"{row['est_cost']:.2f} | {row['cash_drift']:.2f} |\n"
-                    )
+
                 )
 
     if save_simulations and not combined.empty:
@@ -592,7 +591,7 @@ def run(
         policy_crc32 = f"{zlib.crc32(policy_bytes):08x}"
 
     report: dict[str, object] = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "args": {
             key: (str(value) if isinstance(value, Path) else value)
             for key, value in vars(args).items()

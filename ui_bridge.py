@@ -1,7 +1,5 @@
 """JSON bridge between the Next.js UI and the Python decision engine."""
 
-from __future__ import annotations
-
 import json
 import sys
 from dataclasses import asdict

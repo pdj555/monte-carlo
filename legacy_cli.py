@@ -1,13 +1,12 @@
 """Full deprecated simulation CLI preserved behind the thin ``cli.py`` facade."""
 
-from __future__ import annotations
-
 import argparse
 import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
+from collections.abc import Iterable
 
 import pandas as pd
 
@@ -367,7 +366,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
+def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     """Return parsed CLI arguments."""
 
     parser = build_parser()
@@ -455,7 +454,7 @@ def _apply_policy_file(
     args: argparse.Namespace,
     *,
     parser: argparse.ArgumentParser,
-    argv: Optional[list[str]],
+    argv: list[str] | None,
 ) -> argparse.Namespace:
     """Apply JSON policy defaults to CLI args while respecting explicit flags."""
 
@@ -579,7 +578,7 @@ def run(
     )
 
 
-def legacy_main(argv: Optional[Iterable[str]] = None) -> int:
+def legacy_main(argv: Iterable[str] | None = None) -> int:
     """Entrypoint used by the deprecated ``python cli.py`` wrapper."""
 
     print(

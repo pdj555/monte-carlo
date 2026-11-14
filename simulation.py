@@ -1,8 +1,6 @@
 """Monte Carlo simulation helpers."""
 
-from __future__ import annotations
-
-from typing import Mapping, Optional
+from collections.abc import Mapping
 
 import numpy as np
 import pandas as pd
@@ -111,7 +109,7 @@ def _aligned_returns(returns: pd.DataFrame) -> pd.DataFrame:
     return numeric
 
 
-def _start_prices(current_prices: Optional[Mapping[str, float]], tickers: list[str]) -> np.ndarray:
+def _start_prices(current_prices: Mapping[str, float] | None, tickers: list[str]) -> np.ndarray:
     if current_prices is None:
         return np.ones(len(tickers))
     missing = [ticker for ticker in tickers if ticker not in current_prices]
@@ -160,8 +158,8 @@ def simulate_prices(
     days: int,
     scenarios: int,
     dt: float = 1.0,
-    seed: Optional[int] = None,
-    current_price: Optional[float | pd.Series] = None,
+    seed: int | None = None,
+    current_price: float | pd.Series | None = None,
     shock_probability: float = 0.0,
     shock_return: float = -0.15,
     block_size: int = 1,
@@ -266,7 +264,7 @@ def simulate_gbm(
     days: int,
     scenarios: int,
     dt: float = 1.0,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     shock_probability: float = 0.0,
     shock_return: float = -0.15,
 ) -> pd.DataFrame:
@@ -335,8 +333,8 @@ def simulate_joint_prices(
     days: int,
     scenarios: int,
     dt: float = 1.0,
-    seed: Optional[int] = None,
-    current_prices: Optional[Mapping[str, float]] = None,
+    seed: int | None = None,
+    current_prices: Mapping[str, float] | None = None,
     shock_probability: float = 0.0,
     shock_return: float = -0.15,
     block_size: int = 1,
@@ -385,8 +383,8 @@ def simulate_joint_gbm(
     days: int,
     scenarios: int,
     dt: float = 1.0,
-    seed: Optional[int] = None,
-    current_prices: Optional[Mapping[str, float]] = None,
+    seed: int | None = None,
+    current_prices: Mapping[str, float] | None = None,
     shock_probability: float = 0.0,
     shock_return: float = -0.15,
 ) -> pd.DataFrame:
@@ -453,7 +451,7 @@ def simulate_prediction_market(
     mean_reversion: float = 0.2,
     daily_volatility: float = 0.03,
     dt: float = 1.0,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> pd.DataFrame:
     """Simulate prediction-market prices anchored to a fundamental truth prior."""
 

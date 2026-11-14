@@ -1,7 +1,5 @@
 """Public CLI surface for the ``monte-carlo`` command."""
 
-from __future__ import annotations
-
 import argparse
 import contextlib
 import io
@@ -9,7 +7,8 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
+from collections.abc import Iterable
 
 import pandas as pd
 
@@ -344,7 +343,7 @@ def build_public_parser() -> argparse.ArgumentParser:
 
 
 def _parse_public_args_with_parser(
-    argv: Optional[Iterable[str]] = None,
+    argv: Iterable[str] | None = None,
 ) -> tuple[argparse.ArgumentParser, argparse.Namespace]:
     parser = build_public_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
@@ -363,7 +362,7 @@ def _parse_public_args_with_parser(
     return parser, args
 
 
-def parse_public_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
+def parse_public_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     """Return parsed arguments for the public CLI."""
 
     try:
@@ -1057,7 +1056,7 @@ def _run(raw_argv: list[str]) -> int:
         return _classify_exception(exc)[0]
 
 
-def main(argv: Optional[Iterable[str]] = None) -> int:
+def main(argv: Iterable[str] | None = None) -> int:
     """Entrypoint for the public ``monte-carlo`` command.
 
     Exit codes: 0 the command succeeded; 1 it ran but produced no usable result

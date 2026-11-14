@@ -1,7 +1,5 @@
 """Presentation state for the Monte Carlo browser UI."""
 
-from __future__ import annotations
-
 import io
 import os
 from dataclasses import dataclass
