@@ -62,6 +62,7 @@ monte-carlo evaluate evaluation_sets/sample-stability.json --json
 
 pytest -q
 flake8 .
+ruff check .
 ```
 
 - `--json` prints one JSON document on stdout; logs go to stderr. It may be written before or after the command. `monte-carlo --json` with no command exits `2` with a usage document. With `--json`, `--help` and `--version` print a document too (`command` is `help` or `version`), and `schema --json` is accepted. `monte-carlo schema` prints the document's JSON Schema, also from an installed package; the same schema is committed as `schemas/cli-result.v1.schema.json`.
@@ -79,7 +80,7 @@ flake8 .
 - Limits: `--scenarios` at most 1000000, `--days` at most 25200, `--days` x `--scenarios` at most 50000000 for `simulate`, and `--seed` from 0 to 4294967295. Integers are plain ASCII digits (`42`, not `4_2`, `+42` or `42.0`). An `evaluate` manifest is held to the same limits. Above them the exit code is `2`.
 - `config` holds the seed and every setting of the run, with `data_path` made absolute. Without `--seed`, one is drawn and reported (`seed_source: "generated"`). Same seed, settings, and price files give the same bytes; `result.price_sources` carries each local file's absolute path and SHA-256.
 - `config.reproduce` is the argv that replays the numbers from any directory. It leaves out `--output`, `--show`, and `--details`, which change what is saved or shown, not what is computed. The replay prints the same `result` and the same `config` except `seed_source`, which reads `argument` because the seed is now given.
-- CI installs `requirements.lock.txt` first (Python 3.9 to 3.12) and compares a seeded run with `tests/golden/simulate-seed42.json`; do the same to match its numbers exactly.
+- CI installs `requirements.lock.txt` first (Python 3.13 and 3.14) and compares a seeded run with `tests/golden/simulate-seed42.json`; do the same to match its numbers exactly.
 - Dates in a backtest are `YYYY-MM-DD` for daily prices and ISO 8601 date-times (`2024-01-02T14:30:00`) when the price file is intraday.
 - A character the terminal cannot encode (an accented ticker under an ASCII locale) is written as an escape such as `\xc5`, not treated as a write failure.
 
