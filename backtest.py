@@ -26,6 +26,11 @@ from viz import plot_equity_curve
 
 LOGGER = logging.getLogger(__name__)
 
+
+class InsufficientHistoryError(ValueError):
+    """The prices loaded, but are too short for even one walk-forward period."""
+
+
 BACKTEST_ARG_DEFAULTS: dict[str, object] = {
     "tickers": "AAPL",
     "lookback_days": 60,
@@ -287,7 +292,7 @@ def run_walk_forward_backtest(
         range(lookback_days, len(price_history) - holding_days, rebalance_every)
     )
     if not rebalance_positions:
-        raise ValueError(
+        raise InsufficientHistoryError(
             "Not enough price history for the requested walk-forward configuration. "
             "Try smaller lookback/hold settings or provide a longer history."
         )

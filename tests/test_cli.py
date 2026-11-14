@@ -147,7 +147,7 @@ def test_public_simulate_reports_no_valid_results_for_failing_tickers(monkeypatc
 
     messages = "\n".join(record.getMessage() for record in caplog.records)
 
-    assert exit_code == 1
+    assert exit_code == 2
     assert "No simulations were produced for AAPL, MSFT." in messages
     assert "AAPL: network unavailable" in messages
     assert "MSFT: network unavailable" in messages
@@ -527,7 +527,7 @@ def test_public_simulate_reports_missing_offline_data(tmp_path, capsys):
     )
 
     output = capsys.readouterr().out
-    assert exit_code == 1
+    assert exit_code == 2
     assert "Skipped AAPL:" in output
     assert "--data-path" in output
 

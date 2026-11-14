@@ -6,6 +6,7 @@ import argparse
 import contextlib
 import io
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -23,7 +24,11 @@ from evaluation import (
     save_evaluation_report,
 )
 from cli_shared import (
+    MAX_DAYS,
+    MAX_PATH_CELLS,
+    MAX_SCENARIOS,
     IntentionalDefaultsHelpFormatter,
+    bounded_positive_int,
     non_negative_int,
     package_version,
     positive_int,
@@ -37,7 +42,11 @@ from simulate_cli import (
 
 LOGGER = logging.getLogger(__name__)
 
+EXIT_OK = 0
+EXIT_FAILED = 1
 EXIT_USAGE = 2
+EXIT_INTERNAL = 3
+EXIT_OUTPUT = 4
 
 JSON_FLAG_HELP = (
     "Print one JSON document on stdout instead of text "
@@ -52,6 +61,56 @@ class PublicUsageError(Exception):
         super().__init__(message)
         self.parser = parser
         self.message = message
+
+
+class OutputWriteError(BaseException):
+    """Stdout could not be written (closed pipe, full device, closed descriptor).
+
+    Not an ``Exception`` so no error handler in the engine mistakes it for a
+    failed computation; only ``main`` catches it.
+    """
+
+
+class _GuardedStdout:
+    """Stdout that reports a failed write as :class:`OutputWriteError`."""
+
+    def __init__(self, target: Any) -> None:
+        self._target = target
+
+    def write(self, text: str) -> int:
+        if self._target is None:
+            raise OutputWriteError("stdout is closed")
+        try:
+            return self._target.write(text)
+        except (OSError, ValueError) as exc:
+            raise OutputWriteError(str(exc)) from exc
+
+    def flush(self) -> None:
+        if self._target is None:
+            return
+        try:
+            self._target.flush()
+        except (OSError, ValueError) as exc:
+            raise OutputWriteError(str(exc)) from exc
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._target, name)
+
+
+def _discard_pending_stdout() -> None:
+    """Point the stdout descriptor at the null device.
+
+    After a failed write the interpreter would try the same write again while
+    shutting down and print a traceback; this makes that last flush succeed.
+    """
+
+    try:
+        descriptor = sys.stdout.fileno()
+        null = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(null, descriptor)
+        os.close(null)
+    except Exception:
+        pass
 
 
 class _PublicArgumentParser(argparse.ArgumentParser):
@@ -75,6 +134,13 @@ def build_public_parser() -> argparse.ArgumentParser:
         prog="monte-carlo",
         description="Monte Carlo tools for current ideas and historical validation.",
         formatter_class=IntentionalDefaultsHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument(
+        "--json",
+        dest="json_before_command",
+        action="store_true",
+        help=JSON_FLAG_HELP,
     )
     parser.add_argument(
         "--version",
@@ -86,6 +152,7 @@ def build_public_parser() -> argparse.ArgumentParser:
 
     simulate_parser = subparsers.add_parser(
         "simulate",
+        allow_abbrev=False,
         help="Rank current opportunities from simulated future paths.",
         formatter_class=IntentionalDefaultsHelpFormatter,
     )
@@ -96,13 +163,13 @@ def build_public_parser() -> argparse.ArgumentParser:
     )
     simulate_parser.add_argument(
         "--days",
-        type=positive_int,
+        type=bounded_positive_int(MAX_DAYS),
         default=252,
         help="Trading days to simulate into the future.",
     )
     simulate_parser.add_argument(
         "--scenarios",
-        type=positive_int,
+        type=bounded_positive_int(MAX_SCENARIOS),
         default=1000,
         help="Number of Monte Carlo paths to run per ticker.",
     )
@@ -158,6 +225,7 @@ def build_public_parser() -> argparse.ArgumentParser:
 
     backtest_parser = subparsers.add_parser(
         "backtest",
+        allow_abbrev=False,
         help="Validate the process with walk-forward backtesting.",
         formatter_class=IntentionalDefaultsHelpFormatter,
     )
@@ -198,7 +266,7 @@ def build_public_parser() -> argparse.ArgumentParser:
     )
     backtest_parser.add_argument(
         "--scenarios",
-        type=positive_int,
+        type=bounded_positive_int(MAX_SCENARIOS),
         default=1000,
         help="Number of Monte Carlo paths to run at each rebalance.",
     )
@@ -243,6 +311,7 @@ def build_public_parser() -> argparse.ArgumentParser:
 
     evaluate_parser = subparsers.add_parser(
         "evaluate",
+        allow_abbrev=False,
         help="Test decision stability across a reproducible scenario set.",
         formatter_class=IntentionalDefaultsHelpFormatter,
     )
@@ -258,6 +327,12 @@ def build_public_parser() -> argparse.ArgumentParser:
 
     evaluate_parser.add_argument("--json", action="store_true", help=JSON_FLAG_HELP)
 
+    subparsers.add_parser(
+        "schema",
+        allow_abbrev=False,
+        help="Print the JSON Schema of the --json document.",
+    )
+
     return parser
 
 
@@ -268,6 +343,16 @@ def _parse_public_args_with_parser(
     args = parser.parse_args(list(argv) if argv is not None else None)
     if getattr(args, "command", None) in {"simulate", "backtest"} and not args.tickers:
         args.tickers = ["AAPL"]
+    # --json may be written before or after the command; both mean the same.
+    args.json = bool(getattr(args, "json", False) or args.json_before_command)
+    if getattr(args, "command", None) == "simulate":
+        cells = int(args.days) * int(args.scenarios)
+        if cells > MAX_PATH_CELLS:
+            raise PublicUsageError(
+                parser,
+                f"--days x --scenarios is {cells}; the most one run may hold is "
+                f"{MAX_PATH_CELLS}. Lower one of them.",
+            )
     return parser, args
 
 
@@ -664,6 +749,41 @@ def _emit_json(document: dict[str, Any]) -> int:
     return int(document["exit_code"])
 
 
+def _classify_exception(exc: Exception) -> tuple[int, str]:
+    """Exit code and error kind for an exception a command raised.
+
+    Price data that cannot be loaded, and any other rejected input, is the
+    caller's to fix (2). Prices that loaded but are too short to produce
+    anything is a run without a result (1). Everything else is a fault in this
+    program (3).
+    """
+
+    if isinstance(exc, PriceDataError):
+        return EXIT_USAGE, "price_data"
+    if isinstance(exc, backtest_cli.InsufficientHistoryError):
+        return EXIT_FAILED, "no_results"
+    if isinstance(exc, (ValueError, OSError)):
+        return EXIT_USAGE, "invalid_input"
+    return EXIT_INTERNAL, "internal"
+
+
+def _empty_simulation_outcome(result: dict[str, Any]) -> tuple[int, str, str]:
+    """Exit code, error kind and message for a simulate run with no summaries.
+
+    When every requested ticker failed because its prices could not be loaded,
+    the input named data that does not exist: the same condition, and the same
+    exit code, as a backtest that cannot load its prices.
+    """
+
+    report = result.get("report", {})
+    errors = report.get("errors", []) if isinstance(report, dict) else []
+    kinds = {str(item.get("kind")) for item in errors if isinstance(item, dict)}
+    if errors and kinds == {"price_data"}:
+        message = "; ".join(str(item.get("error", "")) for item in errors)
+        return EXIT_USAGE, "price_data", message
+    return EXIT_FAILED, "no_results", "No ticker produced a simulation; see result.errors."
+
+
 def _run_json_command(args: argparse.Namespace) -> int:
     """Run one command and print its result as a single JSON document."""
 
@@ -679,19 +799,25 @@ def _run_json_command(args: argparse.Namespace) -> int:
             legacy_args = _build_public_simulate_legacy_args(args)
             result = execute_public_simulate(args)
             maybe_show_simulation_plots(legacy_args, result)
-            failed = bool(result["summaries"].empty)
-            if failed:
-                _log_no_simulation_output(args=args, result=result)
+            if not result["summaries"].empty:
+                return _emit_json(
+                    cli_json.build_document(
+                        command=command,
+                        exit_code=EXIT_OK,
+                        config=config,
+                        result=cli_json.simulate_result(result),
+                    )
+                )
+            _log_no_simulation_output(args=args, result=result)
+            exit_code, kind, message = _empty_simulation_outcome(result)
             return _emit_json(
                 cli_json.build_document(
                     command=command,
-                    exit_code=cli_json.EXIT_FAILED if failed else cli_json.EXIT_OK,
+                    exit_code=exit_code,
                     config=config,
-                    result=cli_json.simulate_result(result),
-                    error_kind="no_results" if failed else None,
-                    error_message=(
-                        "No ticker produced a simulation; see result.errors." if failed else None
-                    ),
+                    result=cli_json.simulate_result(result) if exit_code == EXIT_FAILED else None,
+                    error_kind=kind,
+                    error_message=message,
                 )
             )
         if command == "backtest":
@@ -699,7 +825,7 @@ def _run_json_command(args: argparse.Namespace) -> int:
             return _emit_json(
                 cli_json.build_document(
                     command=command,
-                    exit_code=cli_json.EXIT_OK,
+                    exit_code=EXIT_OK,
                     config=config,
                     result=cli_json.backtest_result(execute_public_backtest(args)),
                 )
@@ -712,7 +838,7 @@ def _run_json_command(args: argparse.Namespace) -> int:
         return _emit_json(
             cli_json.build_document(
                 command=command,
-                exit_code=cli_json.EXIT_FAILED if failed_runs > 0 else cli_json.EXIT_OK,
+                exit_code=EXIT_FAILED if failed_runs > 0 else EXIT_OK,
                 config=cli_json.evaluate_config(args, report_dict),
                 result=cli_json.evaluate_result(report_dict),
                 error_kind="failed_runs" if failed_runs > 0 else None,
@@ -725,16 +851,13 @@ def _run_json_command(args: argparse.Namespace) -> int:
         )
     except Exception as exc:
         _log_public_error(exc, command=command, args=args)
+        exit_code, kind = _classify_exception(exc)
         return _emit_json(
             cli_json.build_document(
                 command=command,
-                exit_code=cli_json.EXIT_USAGE,
+                exit_code=exit_code,
                 config=config,
-                error_kind=(
-                    "price_data"
-                    if isinstance(exc, PriceDataError)
-                    else "invalid_input" if isinstance(exc, ValueError) else "internal"
-                ),
+                error_kind=kind,
                 error_message=str(exc) or type(exc).__name__,
             )
         )
@@ -747,19 +870,27 @@ def _requested_command(argv: list[str]) -> str | None:
     return None
 
 
-def main(argv: Optional[Iterable[str]] = None) -> int:
-    """Entrypoint for the public ``monte-carlo`` command.
+def _json_requested(argv: list[str]) -> bool:
+    """Whether a command line the parser rejected asked for JSON.
 
-    Exit codes: 0 the command succeeded; 1 it ran but produced no usable result
-    (no ticker simulated, or an evaluation run failed); 2 the command line or
-    its inputs were rejected.
+    Decided by argparse, not by looking for the text: ``--json`` after ``--``
+    is a ticker, and an abbreviation is not the flag.
     """
 
-    raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    probe = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    probe.add_argument("--json", action="store_true")
+    try:
+        known, _ = probe.parse_known_args(argv)
+    except SystemExit:
+        return False
+    return bool(known.json)
+
+
+def _run(raw_argv: list[str]) -> int:
     try:
         parser, args = _parse_public_args_with_parser(raw_argv)
     except PublicUsageError as exc:
-        if "--json" not in raw_argv:
+        if not _json_requested(raw_argv):
             _exit_with_usage(exc)
         import cli_json
 
@@ -767,7 +898,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         return _emit_json(
             cli_json.build_document(
                 command=_requested_command(raw_argv),
-                exit_code=cli_json.EXIT_USAGE,
+                exit_code=EXIT_USAGE,
                 error_kind="usage",
                 error_message=exc.message,
             )
@@ -779,6 +910,11 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             "validation, or `evaluate` for decision stability."
         )
         return 1
+    if args.command == "schema":
+        import cli_json
+
+        print(cli_json.render_schema())
+        return EXIT_OK
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     if args.json:
@@ -789,19 +925,42 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             result = run_public_simulate(args)
             if result["summaries"].empty:
                 _log_no_simulation_output(args=args, result=result)
-                return 1
-            return 0
+                return _empty_simulation_outcome(result)[0]
+            return EXIT_OK
         if args.command == "backtest":
             run_public_backtest(args)
-            return 0
-        if args.command == "evaluate":
-            report = run_public_evaluate(args)
-            return 1 if report.scorecard.failed_runs > 0 else 0
+            return EXIT_OK
+        report = run_public_evaluate(args)
+        return EXIT_FAILED if report.scorecard.failed_runs > 0 else EXIT_OK
     except Exception as exc:
         _log_public_error(exc, command=str(args.command), args=args)
-        return 2
+        return _classify_exception(exc)[0]
 
-    return 2
+
+def main(argv: Optional[Iterable[str]] = None) -> int:
+    """Entrypoint for the public ``monte-carlo`` command.
+
+    Exit codes: 0 the command succeeded; 1 it ran but produced no usable result
+    (prices too short, or an evaluation run failed); 2 the command line or its
+    inputs were rejected, including price data that could not be loaded; 3 an
+    internal error; 4 the output could not be written to stdout.
+    """
+
+    raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    guard = _GuardedStdout(sys.stdout)
+    try:
+        with contextlib.redirect_stdout(guard):  # type: ignore[type-var]
+            try:
+                return _run(raw_argv)
+            finally:
+                guard.flush()
+    except OutputWriteError as exc:
+        _discard_pending_stdout()
+        try:
+            print(f"monte-carlo: could not write to stdout: {exc}", file=sys.stderr)
+        except Exception:
+            pass
+        return EXIT_OUTPUT
 
 
 if __name__ == "__main__":

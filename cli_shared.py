@@ -9,6 +9,12 @@ import pandas as pd
 
 FALLBACK_VERSION = "0.1.0"
 
+# Upper bounds the public CLI accepts. A run holds days x scenarios prices per
+# ticker in memory, so the product is bounded as well as each factor.
+MAX_SCENARIOS = 1_000_000
+MAX_DAYS = 25_200
+MAX_PATH_CELLS = 50_000_000
+
 
 class IntentionalDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
     """Show only defaults that help a human choose the happy path."""
@@ -36,6 +42,18 @@ def positive_int(value: str) -> int:
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return parsed
+
+
+def bounded_positive_int(maximum: int):
+    """Return an argparse type for integers from 1 to ``maximum``."""
+
+    def parse(value: str) -> int:
+        parsed = positive_int(value)
+        if parsed > maximum:
+            raise argparse.ArgumentTypeError(f"must be at most {maximum}")
+        return parsed
+
+    return parse
 
 
 def non_negative_int(value: str) -> int:

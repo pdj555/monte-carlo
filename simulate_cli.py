@@ -426,7 +426,7 @@ def run(
             except PriceDataError as exc:
                 message = str(exc)
                 LOGGER.warning("[%s] %s", ticker, message)
-                errors.append({"ticker": ticker, "error": message})
+                errors.append({"ticker": ticker, "error": message, "kind": "price_data"})
                 continue
 
             source_info = get_price_source(prices)
@@ -440,7 +440,9 @@ def run(
                     "Try a longer price history."
                 )
                 LOGGER.warning("[%s] %s", ticker, message)
-                errors.append({"ticker": ticker, "error": message})
+                errors.append(
+                    {"ticker": ticker, "error": message, "kind": "insufficient_history"}
+                )
                 continue
 
             current_price = float(prices.iloc[-1])
@@ -476,7 +478,7 @@ def run(
             except (OpenAIConfigurationError, OpenAIRequestError) as exc:
                 message = str(exc)
                 LOGGER.error("[%s] %s", ticker, message)
-                errors.append({"ticker": ticker, "error": message})
+                errors.append({"ticker": ticker, "error": message, "kind": "ai_summary"})
             else:
                 ai_summaries[ticker] = ai_text
 

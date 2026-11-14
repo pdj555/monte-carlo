@@ -19,15 +19,20 @@ from typing import Any, Mapping
 import numpy as np
 import pandas as pd
 
+from cli_schema import SCHEMA, SCHEMA_ID
 from cli_shared import package_version
-
-SCHEMA_ID = "monte-carlo.cli-result.v1"
 
 EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_USAGE = 2
+EXIT_INTERNAL = 3
 
-_STATUS_BY_EXIT_CODE = {EXIT_OK: "ok", EXIT_FAILED: "failed", EXIT_USAGE: "error"}
+_STATUS_BY_EXIT_CODE = {
+    EXIT_OK: "ok",
+    EXIT_FAILED: "failed",
+    EXIT_USAGE: "error",
+    EXIT_INTERNAL: "error",
+}
 
 # Seeds drawn for the caller stay below 2**31 so per-ticker offsets added by the
 # engine remain ordinary non-negative integers.
@@ -60,7 +65,8 @@ def to_jsonable(value: Any) -> Any:
         number = float(value)
         return number if math.isfinite(number) else None
     if isinstance(value, (pd.Timestamp,)):
-        return value.isoformat()
+        # Prices are daily, so a date says everything; keep the time only if there is one.
+        return value.date().isoformat() if value == value.normalize() else value.isoformat()
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, pd.Series):
@@ -216,8 +222,11 @@ def backtest_result(result: Mapping[str, Any]) -> dict[str, Any]:
         weights = row.get("selected_weights")
         if isinstance(weights, str):
             row["selected_weights"] = json.loads(weights)
+    summary = to_jsonable(result["summary"])
+    # The engine keeps every summary value as a float; the period count is a count.
+    summary["periods"] = int(summary["periods"])
     return {
-        "summary": to_jsonable(result["summary"]),
+        "summary": summary,
         "rebalance_log": rebalance_log,
         "equity_curve": _frame_records(result["equity_curve"], index_name="date"),
         "price_sources": _price_sources(result.get("price_sources")),
@@ -261,3 +270,7 @@ def build_document(
 
 def render_document(document: Mapping[str, Any]) -> str:
     return json.dumps(document, indent=2, sort_keys=True, allow_nan=False)
+
+
+def render_schema() -> str:
+    return json.dumps(SCHEMA, indent=2)

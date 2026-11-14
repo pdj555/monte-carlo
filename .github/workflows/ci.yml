@@ -93,8 +93,11 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install as AGENTS.md says
-        run: python3 -m pip install -e '.[dev]'
+      - name: Install the locked dependencies, then the package as AGENTS.md says
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.lock.txt
+          python3 -m pip install -e '.[dev]'
 
       - name: Run the JSON commands and check them against the schema
         env:
@@ -105,6 +108,13 @@ jobs:
           monte-carlo backtest AAPL MSFT --source offline --data-path sample_data --lookback 5 --hold 3 --top 1 --scenarios 100 --seed 42 --json > backtest.json
           monte-carlo evaluate evaluation_sets/sample-stability.json --json > evaluate.json
           cmp simulate.json simulate-again.json
+          monte-carlo schema > schema.json
+          cmp schema.json schemas/cli-result.v1.schema.json
+          set +e
+          monte-carlo simulate AAPL MSFT --source offline --data-path sample_data --days 5 --scenarios 100 --seed 42 --json > /dev/full
+          full_exit=$?
+          set -e
+          test "$full_exit" -eq 4
           set +e
           monte-carlo simulate AAPL --days not-a-number --json > usage.json
           usage_exit=$?
@@ -133,3 +143,8 @@ jobs:
           with open("simulate.json", encoding="utf-8") as handle:
               assert json.load(handle)["config"]["seed"] == 42
           PY
+
+      - name: Compare the seeded run with the committed golden result
+        env:
+          MPLBACKEND: Agg
+        run: pytest -q tests/test_cli_json.py -k "golden or schema_command"
