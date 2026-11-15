@@ -84,7 +84,7 @@ ruff check .
 - Dates in a backtest are `YYYY-MM-DD` for daily prices and ISO 8601 date-times (`2024-01-02T14:30:00`) when the price file is intraday.
 - A character the terminal cannot encode (an accented ticker under an ASCII locale) is written as an escape such as `\xc5`, not treated as a write failure.
 
-Behaviour changes against `main`, which apply without `--json` too:
+Behavior changes against `main`, which apply without `--json` too:
 
 - `simulate` where no ticker's prices load: exit `1` -> `2`.
 - `backtest` with too little history for one period: exit `2` -> `1`, and stderr says "No usable result".
